@@ -34,6 +34,11 @@ void StdinSource::poll() {
     }
 }
 
+bool StdinSource::is_eof() const {
+    std::unique_lock<std::mutex> lock(mutex_);
+    return eof_;
+}
+
 bool StdinSource::ready() const {
     std::unique_lock<std::mutex> lock(mutex_);
     return !queue_.empty();
