@@ -11,6 +11,7 @@ public:
 
     double next() override;
     bool ready() const override;
+    bool is_eof() const;
 
     // Called from background thread to poll stdin
     void poll();

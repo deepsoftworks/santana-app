@@ -4,7 +4,6 @@
 #include <ftxui/screen/color.hpp>
 #include <algorithm>
 #include <cmath>
-#include <format>
 #include <sstream>
 #include <iomanip>
 
@@ -22,6 +21,15 @@ Color resolve_color(ChartColor c) {
     }
 }
 
+Color resolve_elem_color(int idx, Color fallback) {
+    if (idx < 0) return fallback;
+    static const Color table[] = {
+        Color::Black, Color::Red, Color::Green, Color::Yellow,
+        Color::Blue,  Color::Magenta, Color::Cyan, Color::White,
+    };
+    return table[std::clamp(idx, 0, 7)];
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 static double safe_range(double lo, double hi) {
@@ -32,7 +40,6 @@ static double safe_range(double lo, double hi) {
 static int value_to_y(double v, double y_min, double y_max, int canvas_h) {
     double frac = (v - y_min) / safe_range(y_min, y_max);
     frac = std::clamp(frac, 0.0, 1.0);
-    // Canvas y=0 is top; invert
     return static_cast<int>((1.0 - frac) * (canvas_h - 1));
 }
 
@@ -47,43 +54,92 @@ static std::string fmt_val(double v) {
     return ss.str();
 }
 
+// Draw a single dataset onto the canvas (braille polyline or custom char)
+static void draw_dataset(
+    Canvas& canvas,
+    const std::vector<double>& data,
+    double y_min, double y_max,
+    Color color,
+    char plot_char,
+    int cw, int ch)
+{
+    const int n = static_cast<int>(data.size());
+    if (n == 0) return;
+
+    if (plot_char != '\0') {
+        // Custom character: place at each data point's cell position
+        std::string ch_str(1, plot_char);
+        for (int i = 0; i < n; ++i) {
+            double xf = static_cast<double>(i) / std::max(1, n - 1);
+            int px = static_cast<int>(xf * (cw - 1));
+            int py = value_to_y(data[i], y_min, y_max, ch);
+            canvas.DrawText(px, py, ch_str, color);
+        }
+    } else {
+        // Braille polyline
+        for (int i = 1; i < n; ++i) {
+            double x0f = static_cast<double>(i - 1) / std::max(1, n - 1);
+            double x1f = static_cast<double>(i)     / std::max(1, n - 1);
+            int x0 = static_cast<int>(x0f * (cw - 1));
+            int x1 = static_cast<int>(x1f * (cw - 1));
+            int y0 = value_to_y(data[i - 1], y_min, y_max, ch);
+            int y1 = value_to_y(data[i],     y_min, y_max, ch);
+            canvas.DrawPointLine(x0, y0, x1, y1, color);
+        }
+    }
+}
+
+// Draw error indicators for hard limits
+static void draw_error_indicators(
+    Canvas& canvas,
+    const std::vector<double>& data,
+    double y_min, double y_max,
+    const ChartOptions& opts,
+    int cw, int ch)
+{
+    const int n = static_cast<int>(data.size());
+    for (int i = 0; i < n; ++i) {
+        double xf = static_cast<double>(i) / std::max(1, n - 1);
+        int px = static_cast<int>(xf * (cw - 1));
+        if (opts.has_hard_max && data[i] > opts.hard_max)
+            canvas.DrawText(px, 0, std::string(1, opts.err_max_char), opts.err_max_color);
+        if (opts.has_hard_min && data[i] < opts.hard_min)
+            canvas.DrawText(px, ch - 1, std::string(1, opts.err_min_char), opts.err_min_color);
+    }
+}
+
 // ─── Line chart ─────────────────────────────────────────────────────────────
 
 Element make_line_chart(
     const std::vector<double>& data,
     double y_min, double y_max,
     Color color,
-    int width, int height)
+    int width, int height,
+    const ChartOptions& opts)
 {
-    // Canvas uses 2x4 braille cells: canvas pixel size = width*2, height*4
     const int cw = width  * 2;
     const int ch = height * 4;
 
     Canvas canvas(cw, ch);
 
-    if (data.empty()) {
+    if (data.empty() && (!opts.data2 || opts.data2->empty()))
         return ftxui::canvas(std::move(canvas));
-    }
 
-    const int n = static_cast<int>(data.size());
-
-    // Draw horizontal grid lines (light)
+    // Grid lines
     for (int g = 1; g < 4; ++g) {
         int gy = static_cast<int>(ch * g / 4.0);
         for (int x = 0; x < cw; x += 4)
             canvas.DrawPoint(x, gy, true, Color::GrayDark);
     }
 
-    // Draw the polyline
-    for (int i = 1; i < n; ++i) {
-        double x0_frac = static_cast<double>(i - 1) / std::max(1, n - 1);
-        double x1_frac = static_cast<double>(i)     / std::max(1, n - 1);
-        int x0 = static_cast<int>(x0_frac * (cw - 1));
-        int x1 = static_cast<int>(x1_frac * (cw - 1));
-        int y0 = value_to_y(data[i - 1], y_min, y_max, ch);
-        int y1 = value_to_y(data[i],     y_min, y_max, ch);
-        canvas.DrawPointLine(x0, y0, x1, y1, color);
-    }
+    draw_dataset(canvas, data, y_min, y_max, color, opts.plot_char, cw, ch);
+
+    if (opts.data2 && !opts.data2->empty())
+        draw_dataset(canvas, *opts.data2, y_min, y_max, opts.color2, opts.plot_char, cw, ch);
+
+    draw_error_indicators(canvas, data, y_min, y_max, opts, cw, ch);
+    if (opts.data2 && !opts.data2->empty())
+        draw_error_indicators(canvas, *opts.data2, y_min, y_max, opts, cw, ch);
 
     return ftxui::canvas(std::move(canvas));
 }
@@ -94,7 +150,8 @@ Element make_bar_chart(
     const std::vector<double>& data,
     double y_min, double y_max,
     Color color,
-    int width, int height)
+    int width, int height,
+    const ChartOptions& opts)
 {
     const int cw = width  * 2;
     const int ch = height * 4;
@@ -104,71 +161,97 @@ Element make_bar_chart(
     if (data.empty()) return ftxui::canvas(std::move(canvas));
 
     const int n = static_cast<int>(data.size());
-    const double bar_w = static_cast<double>(cw) / n;
+    // In two-graph mode interleave bars; otherwise full-width bars
+    const int groups  = opts.data2 ? 2 : 1;
+    const double bar_w = static_cast<double>(cw) / (n * groups);
 
-    for (int i = 0; i < n; ++i) {
-        int x0 = static_cast<int>(i       * bar_w);
-        int x1 = static_cast<int>((i + 1) * bar_w) - 1;
-        int y_top    = value_to_y(data[i], y_min, y_max, ch);
-        int y_bottom = ch - 1;
+    auto draw_bars = [&](const std::vector<double>& d, Color c, int offset) {
+        for (int i = 0; i < static_cast<int>(d.size()); ++i) {
+            int x0 = static_cast<int>((i * groups + offset) * bar_w);
+            int x1 = static_cast<int>((i * groups + offset + 1) * bar_w) - 1;
+            int y_top    = value_to_y(d[i], y_min, y_max, ch);
+            int y_bottom = ch - 1;
+            for (int x = x0; x <= x1; ++x)
+                for (int y = y_top; y <= y_bottom; ++y)
+                    canvas.DrawPoint(x, y, true, c);
+        }
+    };
 
-        for (int x = x0; x <= x1; ++x)
-            for (int y = y_top; y <= y_bottom; ++y)
-                canvas.DrawPoint(x, y, true, color);
-    }
+    draw_bars(data, color, 0);
+    if (opts.data2 && !opts.data2->empty())
+        draw_bars(*opts.data2, opts.color2, 1);
+
+    draw_error_indicators(canvas, data, y_min, y_max, opts, cw, ch);
 
     return ftxui::canvas(std::move(canvas));
 }
 
 // ─── Sparkline ───────────────────────────────────────────────────────────────
 
-Element make_sparkline(
+static Element make_spark_row(
     const std::vector<double>& data,
     double y_min, double y_max,
     Color color)
 {
     static const wchar_t blocks[] = L" ▁▂▃▄▅▆▇█";
     constexpr int num_blocks = 8;
-
     if (data.empty()) return text("");
-
     std::wstring line;
     line.reserve(data.size());
     for (auto v : data) {
         double frac = (v - y_min) / safe_range(y_min, y_max);
         frac = std::clamp(frac, 0.0, 1.0);
-        int idx = static_cast<int>(frac * num_blocks);
-        idx = std::clamp(idx, 0, num_blocks);
+        int idx = std::clamp(static_cast<int>(frac * num_blocks), 0, num_blocks);
         line += blocks[idx];
     }
-
     return text(std::string(line.begin(), line.end())) | ftxui::color(color);
+}
+
+Element make_sparkline(
+    const std::vector<double>& data,
+    double y_min, double y_max,
+    Color color,
+    const ChartOptions& opts)
+{
+    if (!opts.data2) return make_spark_row(data, y_min, y_max, color);
+    return vbox({
+        make_spark_row(data,        y_min, y_max, color),
+        make_spark_row(*opts.data2, y_min, y_max, opts.color2),
+    });
 }
 
 // ─── Stats bar ───────────────────────────────────────────────────────────────
 
-Element make_stats_bar(const RingBuffer<double>::Stats& stats, const std::string& unit) {
+Element make_stats_bar(
+    const RingBuffer<double>::Stats& stats,
+    const std::string& unit,
+    bool rate_mode,
+    const RingBuffer<double>::Stats* stats2)
+{
     auto lbl = [](const std::string& k, const std::string& v) {
-        return hbox({
-            text(k) | dim,
-            text(v) | bold,
-        });
+        return hbox({ text(k) | dim, text(v) | bold });
     };
 
     std::string u = unit.empty() ? "" : " " + unit;
+    std::string rate_tag = rate_mode ? "/s" : "";
 
-    return hbox({
-        lbl(" cur: ", fmt_val(stats.current) + u),
-        text("  "),
-        lbl("min: ", fmt_val(static_cast<double>(stats.min_val)) + u),
-        text("  "),
-        lbl("max: ", fmt_val(static_cast<double>(stats.max_val)) + u),
-        text("  "),
-        lbl("avg: ", fmt_val(stats.mean) + u),
-        text("  "),
-        lbl("n: ",   std::to_string(stats.count)),
-        filler(),
-    });
+    auto row = [&](const RingBuffer<double>::Stats& s) {
+        return hbox({
+            lbl(" cur: ", fmt_val(s.current) + u + rate_tag),
+            text("  "),
+            lbl("min: ", fmt_val(static_cast<double>(s.min_val)) + u + rate_tag),
+            text("  "),
+            lbl("max: ", fmt_val(static_cast<double>(s.max_val)) + u + rate_tag),
+            text("  "),
+            lbl("avg: ", fmt_val(s.mean) + u + rate_tag),
+            text("  "),
+            lbl("n: ", std::to_string(s.count)),
+            filler(),
+        });
+    };
+
+    if (!stats2) return row(stats);
+    return vbox({ row(stats), row(*stats2) });
 }
 
 // ─── Y axis ──────────────────────────────────────────────────────────────────
@@ -182,7 +265,6 @@ Element make_y_axis(double y_min, double y_max, int height_rows) {
         double frac = static_cast<double>(i) / std::max(1, num_ticks - 1);
         double v    = y_min + frac * (y_max - y_min);
         std::string label = fmt_val(v);
-        // Right-align in 8 chars
         while (static_cast<int>(label.size()) < 8) label = " " + label;
         ticks.push_back(text(label));
         if (i > 0) ticks.push_back(filler());
