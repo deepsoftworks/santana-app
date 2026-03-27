@@ -63,8 +63,9 @@ void Renderer::reader_thread() {
                 push_value(raw, rs1, buffer_);
             }
         }
-        if (source_.is_eof() && !eof_seen_.load()) {
+        if (source_.is_eof()) {
             eof_seen_ = true;
+            break;
         }
     }
 }

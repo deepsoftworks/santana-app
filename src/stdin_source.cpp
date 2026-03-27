@@ -17,7 +17,13 @@ void StdinSource::poll() {
     // Non-blocking poll with 50ms timeout
     int ret = ::poll(&pfd, 1, 50);
     if (ret <= 0) return;
-    if (!(pfd.revents & POLLIN)) return;
+    if (!(pfd.revents & POLLIN)) {
+        if (pfd.revents & (POLLHUP | POLLERR)) {
+            std::unique_lock<std::mutex> lock(mutex_);
+            eof_ = true;
+        }
+        return;
+    }
 
     char buf[256];
     if (!fgets(buf, sizeof(buf), stdin)) {

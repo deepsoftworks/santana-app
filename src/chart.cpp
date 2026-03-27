@@ -193,18 +193,18 @@ static Element make_spark_row(
     double y_min, double y_max,
     Color color)
 {
-    static const wchar_t blocks[] = L" ▁▂▃▄▅▆▇█";
+    static const char* blocks[] = {" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"};
     constexpr int num_blocks = 8;
     if (data.empty()) return text("");
-    std::wstring line;
-    line.reserve(data.size());
+    std::string line;
+    line.reserve(data.size() * 3);
     for (auto v : data) {
         double frac = (v - y_min) / safe_range(y_min, y_max);
         frac = std::clamp(frac, 0.0, 1.0);
         int idx = std::clamp(static_cast<int>(frac * num_blocks), 0, num_blocks);
         line += blocks[idx];
     }
-    return text(std::string(line.begin(), line.end())) | ftxui::color(color);
+    return text(line) | ftxui::color(color);
 }
 
 Element make_sparkline(

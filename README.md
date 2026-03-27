@@ -4,6 +4,8 @@
   <img src="santana.png" alt="Santana" width="100">
 </p>
 
+*Work in progress*
+
 Real-time terminal data visualization utility.
 
 ## Features
@@ -25,6 +27,17 @@ cmake --build build -j$(sysctl -n hw.logicalcpu)  # macOS
 
 Requires: CMake ≥ 3.20, C++ (std 20) compiler. 
 Dependencies (FTXUI v5.0.0, CLI11 v2.4.1) are fetched automatically.
+
+## Install (one command)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/yousefjan/santana/main/install.sh | sh
+```
+
+Optional environment variables:
+- `REPO_REF` (default: `main`)
+- `REPO_OWNER` (default: `yousefjan`)
+- `REPO_NAME` (default: `santana`)
 
 ## Usage
 
