@@ -120,7 +120,7 @@ void Renderer::run() {
     Color max_err_col = resolve_elem_color(ec.max_err, Color::Red);
     Color min_err_col = resolve_elem_color(ec.min_err, Color::Red);
 
-    // Ticker thread: fires a Custom event at ~fps rate
+    // Ticker thread: fires a Custom event at ~fps rate.
     std::thread ticker([&] {
         auto interval = std::chrono::milliseconds(1000 / std::max(1, cfg_.fps));
         while (running_) {
@@ -128,6 +128,14 @@ void Renderer::run() {
             if (running_) screen.PostEvent(Event::Custom);
         }
     });
+    struct TickerJoiner {
+        std::thread& thread;
+        std::atomic<bool>& running;
+        ~TickerJoiner() {
+            running = false;
+            if (thread.joinable()) thread.join();
+        }
+    } ticker_joiner{ticker, running_};
 
     auto render_fn = [&]() -> Element {
         auto data  = buffer_.snapshot();
@@ -239,5 +247,4 @@ void Renderer::run() {
     screen.Loop(component);
 
     running_ = false;
-    if (ticker.joinable()) ticker.join();
 }
