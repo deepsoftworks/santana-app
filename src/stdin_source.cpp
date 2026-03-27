@@ -55,6 +55,10 @@ void StdinSource::poll() {
     double val = std::strtod(buf, &end);
     if (end != buf) {
         std::unique_lock<std::mutex> lock(mutex_);
+        // Keep bounded memory under sustained producer > consumer load.
+        if (queue_.size() >= kMaxQueueSize) {
+            queue_.pop_front();
+        }
         queue_.push_back(val);
     }
 }

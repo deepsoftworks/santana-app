@@ -4,6 +4,7 @@
 #include <string>
 #include <deque>
 #include <mutex>
+#include <cstddef>
 
 class StdinSource : public DataSource {
 public:
@@ -18,6 +19,8 @@ public:
     void poll();
 
 private:
+    static constexpr std::size_t kMaxQueueSize = 100000;
+
     int                 fd_ = -1;
     FILE*               stream_ = nullptr;
     mutable std::mutex  mutex_;
