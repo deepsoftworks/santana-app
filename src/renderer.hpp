@@ -8,7 +8,7 @@
 
 class Renderer {
 public:
-    explicit Renderer(Config cfg);
+    Renderer(Config cfg, int input_fd);
     ~Renderer();
 
     // Blocks until the user quits (q or Esc)
@@ -19,6 +19,7 @@ private:
     void compute_range(double& y_min, double& y_max) const;
 
     Config             cfg_;
+    int                input_fd_ = -1;
     RingBuffer<double> buffer_;
     RingBuffer<double> buffer2_;    // two-graph mode, graph 2
     StdinSource        source_;

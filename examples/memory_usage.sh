@@ -5,12 +5,27 @@
 # Usage: ./examples/memory_usage.sh | ./build/santana \
 #   -t "Memory Usage" -u "%" -m line \
 #   --min 0 --max 100 --color yellow \
-#   --scale 50 --history 300 --fps 1
+#   --scale 50 --history 300 --fps 2
 #
 # Features: fixed axis (--min/--max), soft initial scale, yellow theme,
-#           large history for long-term trend, low fps (sampling every 2s).
+#           large history for long-term trend, high refresh rate (500ms).
 
 set -euo pipefail
+
+if [[ -t 1 && "${SANTANA_EXAMPLE_RAW:-0}" != "1" ]]; then
+    ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    SANTANA_BIN="${SANTANA_BIN:-$ROOT_DIR/build/santana}"
+    if [[ ! -x "$SANTANA_BIN" ]]; then
+        echo "santana binary not found at $SANTANA_BIN" >&2
+        echo "Build first: cmake -S . -B build && cmake --build build" >&2
+        exit 1
+    fi
+    SANTANA_EXAMPLE_RAW=1 "$0" "$@" | "$SANTANA_BIN" \
+      -t "Memory Usage" -u "%" -m line \
+      --min 0 --max 100 --color yellow \
+      --scale 50 --history 300 --fps 2
+    exit $?
+fi
 
 if [[ "$(uname -s)" == "Darwin" ]]; then
     PAGE=$(sysctl -n hw.pagesize 2>/dev/null || echo 4096)
@@ -27,14 +42,14 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
                 total = (active + wired + comp + free + spec + inact) * page
                 if (total > 0) printf "%.1f\n", used / total * 100
             }'
-        sleep 2
+        sleep 0.5
     done
 elif [[ -f /proc/meminfo ]]; then
     while true; do
         awk '/^MemTotal/     { total = $2 }
              /^MemAvailable/ { avail = $2 }
              END { printf "%.1f\n", (total - avail) / total * 100 }' /proc/meminfo
-        sleep 2
+        sleep 0.5
     done
 else
     echo "Unsupported platform" >&2; exit 1

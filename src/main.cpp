@@ -4,14 +4,18 @@
 #include <string>
 #include <sstream>
 #include <algorithm>
+#include <iostream>
+#include <fcntl.h>
+#include <unistd.h>
 
 // Parse -C color spec: named scheme or comma-separated terminal color indices (0-7)
 static ElementColors parse_color_spec(const std::string& s) {
     ElementColors ec;
-    if (s == "dark1")  { ec.plot=4; ec.axes=6; ec.text_col=3; ec.title_col=3; return ec; }
-    if (s == "dark2")  { ec.plot=5; ec.axes=3; ec.text_col=2; ec.title_col=3; return ec; }
-    if (s == "light1") { ec.plot=2; ec.axes=4; ec.text_col=1; ec.title_col=2; return ec; }
-    if (s == "light2") { ec.plot=4; ec.axes=2; ec.text_col=3; ec.title_col=4; return ec; }
+    if (s == "dark1")   { ec.plot=4; ec.axes=6; ec.text_col=3; ec.title_col=3; return ec; }
+    if (s == "dark2")   { ec.plot=5; ec.axes=3; ec.text_col=2; ec.title_col=3; return ec; }
+    if (s == "light1")  { ec.plot=2; ec.axes=4; ec.text_col=1; ec.title_col=2; return ec; }
+    if (s == "light2")  { ec.plot=4; ec.axes=2; ec.text_col=3; ec.title_col=4; return ec; }
+    if (s == "vampire") { ec.plot=1; ec.plot2=5; ec.axes=0; ec.text_col=0; ec.title_col=1; return ec; }
 
     // plot[,axes,text,title,max_err,min_err]
     int* fields[] = {
@@ -85,7 +89,7 @@ int main(int argc, char** argv) {
     std::string color_spec;
     app.add_option("-C,--colors", color_spec,
         "Per-element colors: plot[,axes,text,title,max_err,min_err] (0-7)\n"
-        "  or named scheme: dark1, dark2, light1, light2\n"
+        "  or named scheme: dark1, dark2, light1, light2, vampire\n"
         "  Colors: 0=black 1=red 2=green 3=yellow 4=blue 5=magenta 6=cyan 7=white");
 
     CLI11_PARSE(app, argc, argv);
@@ -137,7 +141,24 @@ int main(int argc, char** argv) {
     cfg.fps     = std::max(1,  std::min(120, cfg.fps));
     cfg.history = std::max(10, std::min(10000, cfg.history));
 
-    Renderer renderer(cfg);
+    int input_fd = ::dup(STDIN_FILENO);
+    if (input_fd < 0) {
+        std::cerr << "Failed to duplicate stdin\n";
+        return 1;
+    }
+
+    if (!::isatty(STDIN_FILENO)) {
+        int tty_fd = ::open("/dev/tty", O_RDONLY);
+        if (tty_fd < 0 || ::dup2(tty_fd, STDIN_FILENO) < 0) {
+            if (tty_fd >= 0) ::close(tty_fd);
+            std::cerr << "Failed to open /dev/tty for interactive input\n";
+            ::close(input_fd);
+            return 1;
+        }
+        ::close(tty_fd);
+    }
+
+    Renderer renderer(cfg, input_fd);
     renderer.run();
 
     return 0;

@@ -10,10 +10,12 @@
 
 using namespace ftxui;
 
-Renderer::Renderer(Config cfg)
+Renderer::Renderer(Config cfg, int input_fd)
     : cfg_(std::move(cfg))
+    , input_fd_(input_fd)
     , buffer_(static_cast<size_t>(cfg_.history))
     , buffer2_(static_cast<size_t>(cfg_.history))
+    , source_(input_fd_)
     , rate_mode_(cfg_.rate_mode)
 {}
 

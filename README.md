@@ -8,6 +8,10 @@
 
 Real-time terminal data visualization utility.
 
+<img src="examples/network.gif" width="49%"/> <img src="examples/sine.gif" width="49%"/>
+<img src="examples/load.gif" width="49%"/> <img src="examples/http.gif" width="49%"/>
+
+
 ## Features
 
 - **Three chart types**: line (braille-dot polyline), bar, sparkline
@@ -28,16 +32,6 @@ cmake --build build -j$(sysctl -n hw.logicalcpu)  # macOS
 Requires: CMake ≥ 3.20, C++ (std 20) compiler. 
 Dependencies (FTXUI v5.0.0, CLI11 v2.4.1) are fetched automatically.
 
-## Install (one command)
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/yousefjan/santana/main/install.sh | sh
-```
-
-Optional environment variables:
-- `REPO_REF` (default: `main`)
-- `REPO_OWNER` (default: `yousefjan`)
-- `REPO_NAME` (default: `santana`)
 
 ## Usage
 
@@ -67,12 +61,16 @@ Options:
   --hard-min FLOAT            Hard minimum: if below draws error symbol and fixes lower scale
   --scale FLOAT               Initial soft Y axis scale (autoscale can exceed this)
   -C,--colors TEXT            Per-element colors: plot[,axes,text,title,max_err,min_err] (0-7)
-                                or named scheme: dark1, dark2, light1, light2
+                                or named scheme: dark1, dark2, light1, light2, vampire
                                 Colors: 0=black 1=red 2=green 3=yellow 4=blue 5=magenta 6=cyan 7=white
 ```
+## Examples
 
-## Key bindings
+```bash
+./examples/exp.sh            # standalone demo signal
+./examples/exp.sh load       # system load (1m/5m)
+./examples/exp.sh memory     # memory usage %
+./examples/exp.sh network    # rx/tx throughput
+./examples/exp.sh http       # synthetic HTTP traffic
+```
 
-| Key | Action |
-|-----|--------|
-| `q` / `Esc` | Quit |

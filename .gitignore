@@ -22,5 +22,6 @@ _deps/
 *.swo
 .DS_Store
 
-# Compiled binary (if ever installed locally)
+# Compiled binaries
 santana
+stresstest

@@ -4,12 +4,28 @@
 #
 # Usage: ./examples/load_average.sh | ./build/santana \
 #   -2 -t "Load Average (1m / 5m)" -m line \
-#   -C dark2 --scale 4 --history 360 --fps 1
+#   -C vampire --scale 4 --history 360 --fps 2
 #
-# Features: dual-graph (-2), per-element color scheme (-C dark2),
+# Features: dual-graph (-2), vampire color scheme for light backgrounds (-C vampire),
 #           soft initial scale (--scale matches typical CPU core count),
-#           large history window (360 samples × 5s = 30 min of trend),
+#           large history window (360 samples × 500ms = 3 min of trend),
 #           spark mode alternative: replace "-m line" with "-m spark".
+
+set -euo pipefail
+
+if [[ -t 1 && "${SANTANA_EXAMPLE_RAW:-0}" != "1" ]]; then
+    ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    SANTANA_BIN="${SANTANA_BIN:-$ROOT_DIR/build/santana}"
+    if [[ ! -x "$SANTANA_BIN" ]]; then
+        echo "santana binary not found at $SANTANA_BIN" >&2
+        echo "Build first: cmake -S . -B build && cmake --build build" >&2
+        exit 1
+    fi
+    SANTANA_EXAMPLE_RAW=1 "$0" "$@" | "$SANTANA_BIN" \
+      -2 -t "Load Average (1m / 5m)" -m line \
+      -C vampire --scale 2 --history 360 --fps 2
+    exit $?
+fi
 
 while true; do
     if [[ "$(uname -s)" == "Darwin" ]]; then
@@ -21,5 +37,5 @@ while true; do
     else
         echo "Unsupported platform" >&2; exit 1
     fi
-    sleep 5
+    sleep 0.5
 done

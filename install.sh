@@ -2,7 +2,7 @@
 
 set -eu
 
-REPO_OWNER="${REPO_OWNER:-yousefjan}"
+REPO_OWNER="${REPO_OWNER:-deepsoftworks}"
 REPO_NAME="${REPO_NAME:-santana}"
 REPO_REF="${REPO_REF:-main}"
 

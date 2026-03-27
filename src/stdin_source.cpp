@@ -3,15 +3,34 @@
 #include <cerrno>
 #include <cstring>
 #include <stdexcept>
-#include <unistd.h>
 #include <poll.h>
+#include <unistd.h>
 
-StdinSource::StdinSource() = default;
-StdinSource::~StdinSource() = default;
+StdinSource::StdinSource(int fd)
+    : fd_(fd) {
+    if (fd_ >= 0) {
+        stream_ = ::fdopen(fd_, "r");
+    }
+}
+
+StdinSource::~StdinSource() {
+    if (stream_) {
+        ::fclose(stream_);
+        stream_ = nullptr;
+    } else if (fd_ >= 0) {
+        ::close(fd_);
+    }
+}
 
 void StdinSource::poll() {
+    if (fd_ < 0 || !stream_) {
+        std::unique_lock<std::mutex> lock(mutex_);
+        eof_ = true;
+        return;
+    }
+
     struct pollfd pfd{};
-    pfd.fd     = STDIN_FILENO;
+    pfd.fd     = fd_;
     pfd.events = POLLIN;
 
     // Non-blocking poll with 50ms timeout
@@ -26,7 +45,7 @@ void StdinSource::poll() {
     }
 
     char buf[256];
-    if (!fgets(buf, sizeof(buf), stdin)) {
+    if (!::fgets(buf, sizeof(buf), stream_)) {
         std::unique_lock<std::mutex> lock(mutex_);
         eof_ = true;
         return;
