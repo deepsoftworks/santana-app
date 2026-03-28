@@ -4,11 +4,11 @@
 #
 # Usage: ./examples/network_bandwidth.sh [iface] | ./build/santana \
 #   -2 -r -m bar -t "Network Bandwidth" -u "B/s" \
-#   --color cyan \
-#   --history 60 --fps 2
+#   --color red --color2 black \
+#   --history 60 --fps 10
 #
 # Features: dual-graph (-2), rate mode (-r), bar chart,
-#           auto-scaled axis, fixed history window, 500ms refresh rate.
+#           auto-scaled axis, fixed history window, 100ms refresh rate.
 
 set -euo pipefail
 
@@ -22,8 +22,8 @@ if [[ -t 1 && "${SANTANA_EXAMPLE_RAW:-0}" != "1" ]]; then
     fi
     SANTANA_EXAMPLE_RAW=1 "$0" "$@" | "$SANTANA_BIN" \
       -2 -r -m bar -t "Network Bandwidth" -u "B/s" \
-      --color cyan \
-      --history 60 --fps 2
+      --color red --color2 black \
+      --history 60 --fps 10
     exit $?
 fi
 
@@ -34,7 +34,7 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
         # The Link-level row carries cumulative byte counters; IP rows do not.
         netstat -ib | awk -v iface="$IFACE" \
             '$1 == iface && /Link/ { print $7; print $10; exit }'
-        sleep 0.5
+        sleep 0.1
     done
 elif [[ -f /proc/net/dev ]]; then
     IFACE=${1:-$(ip route 2>/dev/null | awk '/^default/ { print $5; exit }')}
@@ -42,7 +42,7 @@ elif [[ -f /proc/net/dev ]]; then
     while true; do
         # /proc/net/dev after "iface:": col 2 = rx_bytes, col 10 = tx_bytes
         awk -v iface="${IFACE}:" '$1 == iface { print $2; print $10 }' /proc/net/dev
-        sleep 0.5
+        sleep 0.1
     done
 else
     echo "Unsupported platform" >&2; exit 1

@@ -59,6 +59,11 @@ int main(int argc, char** argv) {
         "Chart color: green, cyan, yellow, red, white")
         ->check(CLI::IsMember({"green", "cyan", "yellow", "red", "white"}));
 
+    std::string color2_str;
+    app.add_option("--color2", color2_str,
+        "Second graph color (two-graph mode): black, red, green, yellow, blue, magenta, cyan, white")
+        ->check(CLI::IsMember({"black", "red", "green", "yellow", "blue", "magenta", "cyan", "white"}));
+
     // ── New flags ────────────────────────────────────────────────────────────
     app.add_flag("-2", cfg.two_graph,
         "Read two values and draw two plots (second in contrasting color)");
@@ -137,6 +142,16 @@ int main(int argc, char** argv) {
 
     // Per-element colors
     if (!color_spec.empty()) cfg.elem_colors = parse_color_spec(color_spec);
+
+    // Second graph color (applied after -C so it takes precedence)
+    if (!color2_str.empty()) {
+        static const std::pair<const char*, int> color2_map[] = {
+            {"black",   0}, {"red",     1}, {"green", 2}, {"yellow", 3},
+            {"blue",    4}, {"magenta", 5}, {"cyan",  6}, {"white",  7},
+        };
+        for (auto& [name, idx] : color2_map)
+            if (color2_str == name) { cfg.elem_colors.plot2 = idx; break; }
+    }
 
     cfg.fps     = std::max(1,  std::min(120, cfg.fps));
     cfg.history = std::max(10, std::min(10000, cfg.history));

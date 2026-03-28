@@ -6,16 +6,40 @@ REPO_OWNER="${REPO_OWNER:-deepsoftworks}"
 REPO_NAME="${REPO_NAME:-santana}"
 REPO_REF="${REPO_REF:-main}"
 
-need_cmd() {
-  if ! command -v "$1" >/dev/null 2>&1; then
-    printf 'Error: required command not found: %s\n' "$1" >&2
+install_pkg() {
+  pkg="$1"
+  if command -v brew >/dev/null 2>&1; then
+    brew install "$pkg"
+  elif command -v apt-get >/dev/null 2>&1; then
+    sudo apt-get install -y "$pkg"
+  elif command -v dnf >/dev/null 2>&1; then
+    sudo dnf install -y "$pkg"
+  elif command -v yum >/dev/null 2>&1; then
+    sudo yum install -y "$pkg"
+  elif command -v pacman >/dev/null 2>&1; then
+    sudo pacman -S --noconfirm "$pkg"
+  elif command -v apk >/dev/null 2>&1; then
+    sudo apk add "$pkg"
+  else
+    printf 'Error: no supported package manager found to install: %s\n' "$pkg" >&2
     exit 1
   fi
 }
 
-need_cmd curl
-need_cmd tar
-need_cmd cmake
+ensure_cmd() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    printf 'Installing missing dependency: %s\n' "$1"
+    install_pkg "$1"
+    if ! command -v "$1" >/dev/null 2>&1; then
+      printf 'Error: failed to install: %s\n' "$1" >&2
+      exit 1
+    fi
+  fi
+}
+
+ensure_cmd curl
+ensure_cmd tar
+ensure_cmd cmake
 
 if command -v nproc >/dev/null 2>&1; then
   JOBS="$(nproc)"
