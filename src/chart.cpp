@@ -122,7 +122,7 @@ Element make_line_chart(
 
     Canvas canvas(cw, ch);
 
-    if (data.empty() && (!opts.data2 || opts.data2->empty()))
+    if (data.empty() && opts.extra_data.empty())
         return ftxui::canvas(std::move(canvas));
 
     // Grid lines
@@ -134,12 +134,16 @@ Element make_line_chart(
 
     draw_dataset(canvas, data, y_min, y_max, color, opts.plot_char, cw, ch);
 
-    if (opts.data2 && !opts.data2->empty())
-        draw_dataset(canvas, *opts.data2, y_min, y_max, opts.color2, opts.plot_char, cw, ch);
+    for (size_t i = 0; i < opts.extra_data.size(); ++i) {
+        if (opts.extra_data[i] && !opts.extra_data[i]->empty())
+            draw_dataset(canvas, *opts.extra_data[i], y_min, y_max, opts.extra_colors[i], opts.plot_char, cw, ch);
+    }
 
     draw_error_indicators(canvas, data, y_min, y_max, opts, cw, ch);
-    if (opts.data2 && !opts.data2->empty())
-        draw_error_indicators(canvas, *opts.data2, y_min, y_max, opts, cw, ch);
+    for (size_t i = 0; i < opts.extra_data.size(); ++i) {
+        if (opts.extra_data[i] && !opts.extra_data[i]->empty())
+            draw_error_indicators(canvas, *opts.extra_data[i], y_min, y_max, opts, cw, ch);
+    }
 
     return ftxui::canvas(std::move(canvas));
 }
@@ -161,8 +165,8 @@ Element make_bar_chart(
     if (data.empty()) return ftxui::canvas(std::move(canvas));
 
     const int n = static_cast<int>(data.size());
-    // In two-graph mode interleave bars; otherwise full-width bars
-    const int groups  = opts.data2 ? 2 : 1;
+    // Interleave bars across all series
+    const int groups  = 1 + static_cast<int>(opts.extra_data.size());
     const double bar_w = static_cast<double>(cw) / (n * groups);
 
     auto draw_bars = [&](const std::vector<double>& d, Color c, int offset) {
@@ -178,8 +182,10 @@ Element make_bar_chart(
     };
 
     draw_bars(data, color, 0);
-    if (opts.data2 && !opts.data2->empty())
-        draw_bars(*opts.data2, opts.color2, 1);
+    for (size_t i = 0; i < opts.extra_data.size(); ++i) {
+        if (opts.extra_data[i] && !opts.extra_data[i]->empty())
+            draw_bars(*opts.extra_data[i], opts.extra_colors[i], static_cast<int>(i) + 1);
+    }
 
     draw_error_indicators(canvas, data, y_min, y_max, opts, cw, ch);
 
@@ -213,20 +219,23 @@ Element make_sparkline(
     Color color,
     const ChartOptions& opts)
 {
-    if (!opts.data2) return make_spark_row(data, y_min, y_max, color);
-    return vbox({
-        make_spark_row(data,        y_min, y_max, color),
-        make_spark_row(*opts.data2, y_min, y_max, opts.color2),
-    });
+    Elements rows;
+    rows.push_back(make_spark_row(data, y_min, y_max, color));
+    for (size_t i = 0; i < opts.extra_data.size(); ++i) {
+        if (opts.extra_data[i])
+            rows.push_back(make_spark_row(*opts.extra_data[i], y_min, y_max, opts.extra_colors[i]));
+    }
+    if (rows.size() == 1) return rows[0];
+    return vbox(std::move(rows));
 }
 
 // ─── Stats bar ───────────────────────────────────────────────────────────────
 
 Element make_stats_bar(
-    const RingBuffer<double>::Stats& stats,
+    const std::vector<RingBuffer<double>::Stats>& all_stats,
     const std::string& unit,
     bool rate_mode,
-    const RingBuffer<double>::Stats* stats2)
+    const std::vector<std::string>& labels)
 {
     auto lbl = [](const std::string& k, const std::string& v) {
         return hbox({ text(k) | dim, text(v) | bold });
@@ -235,23 +244,34 @@ Element make_stats_bar(
     std::string u = unit.empty() ? "" : " " + unit;
     std::string rate_tag = rate_mode ? "/s" : "";
 
-    auto row = [&](const RingBuffer<double>::Stats& s) {
-        return hbox({
-            lbl(" cur: ", fmt_val(s.current) + u + rate_tag),
-            text("  "),
-            lbl("min: ", fmt_val(static_cast<double>(s.min_val)) + u + rate_tag),
-            text("  "),
-            lbl("max: ", fmt_val(static_cast<double>(s.max_val)) + u + rate_tag),
-            text("  "),
-            lbl("avg: ", fmt_val(s.mean) + u + rate_tag),
-            text("  "),
-            lbl("n: ", std::to_string(s.count)),
-            filler(),
-        });
+    auto row = [&](const RingBuffer<double>::Stats& s, const std::string& label) {
+        Elements elems;
+        if (!label.empty())
+            elems.push_back(text("[" + label + "] ") | bold);
+        elems.push_back(lbl(" cur: ", fmt_val(s.current) + u + rate_tag));
+        elems.push_back(text("  "));
+        elems.push_back(lbl("min: ", fmt_val(static_cast<double>(s.min_val)) + u + rate_tag));
+        elems.push_back(text("  "));
+        elems.push_back(lbl("max: ", fmt_val(static_cast<double>(s.max_val)) + u + rate_tag));
+        elems.push_back(text("  "));
+        elems.push_back(lbl("avg: ", fmt_val(s.mean) + u + rate_tag));
+        elems.push_back(text("  "));
+        elems.push_back(lbl("n: ", std::to_string(s.count)));
+        elems.push_back(filler());
+        return hbox(std::move(elems));
     };
 
-    if (!stats2) return row(stats);
-    return vbox({ row(stats), row(*stats2) });
+    if (all_stats.size() == 1) {
+        std::string label = labels.empty() ? "" : labels[0];
+        return row(all_stats[0], label);
+    }
+
+    Elements rows;
+    for (size_t i = 0; i < all_stats.size(); ++i) {
+        std::string label = (i < labels.size()) ? labels[i] : "";
+        rows.push_back(row(all_stats[i], label));
+    }
+    return vbox(std::move(rows));
 }
 
 // ─── Y axis ──────────────────────────────────────────────────────────────────

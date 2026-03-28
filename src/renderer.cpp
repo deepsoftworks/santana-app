@@ -10,14 +10,29 @@
 
 using namespace ftxui;
 
+// Default colors for streams 2-10
+static const Color kStreamPalette[] = {
+    Color::White,
+    Color::Cyan,
+    Color::Yellow,
+    Color::Magenta,
+    Color::Red,
+    Color::Blue,
+    Color::GrayLight,
+    Color::GrayDark,
+    Color::Default,
+};
+
 Renderer::Renderer(Config cfg, int input_fd)
     : cfg_(std::move(cfg))
     , input_fd_(input_fd)
-    , buffer_(static_cast<size_t>(cfg_.history))
-    , buffer2_(static_cast<size_t>(cfg_.history))
     , source_(input_fd_)
     , rate_mode_(cfg_.rate_mode)
-{}
+{
+    cfg_.num_streams = std::max(1, std::min(10, cfg_.num_streams));
+    for (int i = 0; i < cfg_.num_streams; ++i)
+        buffers_.push_back(std::make_unique<RingBuffer<double> >(static_cast<size_t>(cfg_.history)));
+}
 
 Renderer::~Renderer() {
     running_ = false;
@@ -30,22 +45,22 @@ void Renderer::reader_thread() {
         std::chrono::steady_clock::time_point prev_time;
         bool has_prev = false;
     };
-    RateState rs1, rs2;
+    std::vector<RateState> rs(static_cast<size_t>(cfg_.num_streams));
     int line_index = 0;
 
-    auto push_value = [&](double raw, RateState& rs, RingBuffer<double>& buf) {
+    auto push_value = [&](double raw, RateState& state, RingBuffer<double>& buf) {
         if (rate_reset_.exchange(false)) {
-            rs = {};
+            state = {};
         }
         if (rate_mode_.load()) {
             auto now = std::chrono::steady_clock::now();
-            if (rs.has_prev) {
-                double dt = std::chrono::duration<double>(now - rs.prev_time).count();
-                if (dt > 0) buf.push((raw - rs.prev_val) / dt);
+            if (state.has_prev) {
+                double dt = std::chrono::duration<double>(now - state.prev_time).count();
+                if (dt > 0) buf.push((raw - state.prev_val) / dt);
             }
-            rs.prev_val  = raw;
-            rs.prev_time = now;
-            rs.has_prev  = true;
+            state.prev_val  = raw;
+            state.prev_time = now;
+            state.has_prev  = true;
         } else {
             buf.push(raw);
         }
@@ -55,15 +70,9 @@ void Renderer::reader_thread() {
         source_.poll();
         while (source_.ready()) {
             double raw = source_.next();
-            if (cfg_.two_graph) {
-                if (line_index % 2 == 0)
-                    push_value(raw, rs1, buffer_);
-                else
-                    push_value(raw, rs2, buffer2_);
-                ++line_index;
-            } else {
-                push_value(raw, rs1, buffer_);
-            }
+            int idx = line_index % cfg_.num_streams;
+            push_value(raw, rs[static_cast<size_t>(idx)], *buffers_[static_cast<size_t>(idx)]);
+            ++line_index;
         }
         if (source_.is_eof()) {
             eof_seen_ = true;
@@ -73,14 +82,14 @@ void Renderer::reader_thread() {
 }
 
 void Renderer::compute_range(double& y_min, double& y_max) const {
-    auto st1 = buffer_.stats();
-    double data_min = static_cast<double>(st1.min_val);
-    double data_max = static_cast<double>(st1.max_val);
+    auto st0 = buffers_[0]->stats();
+    double data_min = static_cast<double>(st0.min_val);
+    double data_max = static_cast<double>(st0.max_val);
 
-    if (cfg_.two_graph) {
-        auto st2 = buffer2_.stats();
-        data_min = std::min(data_min, static_cast<double>(st2.min_val));
-        data_max = std::max(data_max, static_cast<double>(st2.max_val));
+    for (size_t i = 1; i < buffers_.size(); ++i) {
+        auto st = buffers_[i]->stats();
+        data_min = std::min(data_min, static_cast<double>(st.min_val));
+        data_max = std::max(data_max, static_cast<double>(st.max_val));
     }
 
     if (cfg_.auto_min) {
@@ -112,13 +121,21 @@ void Renderer::run() {
 
     // Resolve element colors
     auto& ec        = cfg_.elem_colors;
-    Color plot_col  = resolve_elem_color(ec.plot,      resolve_color(cfg_.color));
-    Color plot2_col = resolve_elem_color(ec.plot2,     Color::White);
     Color axes_col  = resolve_elem_color(ec.axes,      Color::Default);
     Color text_col  = resolve_elem_color(ec.text_col,  Color::Default);
     Color title_col = resolve_elem_color(ec.title_col, Color::Default);
     Color max_err_col = resolve_elem_color(ec.max_err, Color::Red);
     Color min_err_col = resolve_elem_color(ec.min_err, Color::Red);
+
+    // Resolve per-stream plot colors
+    std::vector<Color> stream_colors;
+    stream_colors.push_back(resolve_elem_color(ec.plot, resolve_color(cfg_.color)));
+    for (int i = 1; i < cfg_.num_streams; ++i) {
+        if (i == 1 && ec.plot2 >= 0)
+            stream_colors.push_back(resolve_elem_color(ec.plot2, Color::White));
+        else
+            stream_colors.push_back(kStreamPalette[(i - 1) % 9]);
+    }
 
     // Ticker thread: fires a Custom event at ~fps rate.
     std::thread ticker([&] {
@@ -138,23 +155,27 @@ void Renderer::run() {
     } ticker_joiner{ticker, running_};
 
     auto render_fn = [&]() -> Element {
-        auto data  = buffer_.snapshot();
-        auto stats = buffer_.stats();
-
         double y_min = 0.0, y_max = 1.0;
         compute_range(y_min, y_max);
 
         int term_w = screen.dimx();
         int term_h = screen.dimy();
 
-        // Two-graph mode stats footer is two rows tall
-        int stats_rows = cfg_.two_graph ? 2 : 1;
+        int stats_rows = cfg_.num_streams;
         int chart_h = std::max(4, term_h - 5 - stats_rows);
         int chart_w = std::max(10, term_w - 12);
 
         std::string title_str = cfg_.title;
         if (!cfg_.unit.empty()) title_str += "  [" + cfg_.unit + "]";
         if (rate_mode_.load())  title_str += "  (rate)";
+
+        // Snapshot all streams
+        std::vector<std::vector<double> > all_data(static_cast<size_t>(cfg_.num_streams));
+        std::vector<RingBuffer<double>::Stats> all_stats(static_cast<size_t>(cfg_.num_streams));
+        for (int i = 0; i < cfg_.num_streams; ++i) {
+            all_data[static_cast<size_t>(i)]  = buffers_[static_cast<size_t>(i)]->snapshot();
+            all_stats[static_cast<size_t>(i)] = buffers_[static_cast<size_t>(i)]->stats();
+        }
 
         // Build ChartOptions
         ChartOptions opts;
@@ -167,36 +188,28 @@ void Renderer::run() {
         opts.hard_min     = cfg_.hard_min;
         opts.err_max_color = max_err_col;
         opts.err_min_color = min_err_col;
-        opts.color2       = plot2_col;
 
-        std::vector<double> data2;
-        if (cfg_.two_graph) {
-            data2 = buffer2_.snapshot();
-            opts.data2 = &data2;
+        for (int i = 1; i < cfg_.num_streams; ++i) {
+            opts.extra_data.push_back(&all_data[static_cast<size_t>(i)]);
+            opts.extra_colors.push_back(stream_colors[static_cast<size_t>(i)]);
         }
 
         Element chart_elem;
         if (cfg_.mode == ChartMode::Spark) {
             chart_elem = vbox({
                 filler(),
-                make_sparkline(data, y_min, y_max, plot_col, opts),
+                make_sparkline(all_data[0], y_min, y_max, stream_colors[0], opts),
                 filler(),
             });
         } else if (cfg_.mode == ChartMode::Bar) {
-            chart_elem = make_bar_chart(data, y_min, y_max, plot_col, chart_w, chart_h, opts);
+            chart_elem = make_bar_chart(all_data[0], y_min, y_max, stream_colors[0], chart_w, chart_h, opts);
         } else {
-            chart_elem = make_line_chart(data, y_min, y_max, plot_col, chart_w, chart_h, opts);
+            chart_elem = make_line_chart(all_data[0], y_min, y_max, stream_colors[0], chart_w, chart_h, opts);
         }
 
         Element y_axis_elem = make_y_axis(y_min, y_max, chart_h) | ftxui::color(axes_col);
 
-        const RingBuffer<double>::Stats* stats2_ptr = nullptr;
-        RingBuffer<double>::Stats stats2;
-        if (cfg_.two_graph) {
-            stats2 = buffer2_.stats();
-            stats2_ptr = &stats2;
-        }
-        Element stats_elem = make_stats_bar(stats, cfg_.unit, rate_mode_.load(), stats2_ptr)
+        Element stats_elem = make_stats_bar(all_stats, cfg_.unit, rate_mode_.load(), cfg_.stream_labels)
                            | ftxui::color(text_col);
 
         // EOF notice appended to stats row

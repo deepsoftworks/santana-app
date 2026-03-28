@@ -64,9 +64,18 @@ int main(int argc, char** argv) {
         "Second graph color (two-graph mode): black, red, green, yellow, blue, magenta, cyan, white")
         ->check(CLI::IsMember({"black", "red", "green", "yellow", "blue", "magenta", "cyan", "white"}));
 
-    // ── New flags ────────────────────────────────────────────────────────────
-    app.add_flag("-2", cfg.two_graph,
-        "Read two values and draw two plots (second in contrasting color)");
+    // ── Stream count / labels ────────────────────────────────────────────────
+    bool two_flag = false;
+    app.add_flag("-2", two_flag,
+        "Read two interleaved streams (shorthand for -n 2)");
+
+    app.add_option("-n,--streams", cfg.num_streams,
+        "Number of interleaved input streams, 1-10 (default: 1)")
+        ->check(CLI::Range(1, 10));
+
+    std::string labels_str;
+    app.add_option("--labels", labels_str,
+        "Comma-separated stream labels, e.g. cpu,mem,net");
 
     app.add_flag("-r,--rate", cfg.rate_mode,
         "Rate mode: divide value by elapsed time between samples (for counters)");
@@ -98,6 +107,18 @@ int main(int argc, char** argv) {
         "  Colors: 0=black 1=red 2=green 3=yellow 4=blue 5=magenta 6=cyan 7=white");
 
     CLI11_PARSE(app, argc, argv);
+
+    // -2 is shorthand for -n 2; only apply if -n wasn't explicitly given
+    if (two_flag && cfg.num_streams == 1) cfg.num_streams = 2;
+    cfg.num_streams = std::max(1, std::min(10, cfg.num_streams));
+
+    // Parse stream labels
+    if (!labels_str.empty()) {
+        std::istringstream lss(labels_str);
+        std::string token;
+        while (std::getline(lss, token, ','))
+            cfg.stream_labels.push_back(token);
+    }
 
     // Resolve mode
     if      (mode_str == "bar")   cfg.mode = ChartMode::Bar;

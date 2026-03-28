@@ -5,6 +5,8 @@
 #include <thread>
 #include <atomic>
 #include <chrono>
+#include <memory>
+#include <vector>
 
 class Renderer {
 public:
@@ -20,12 +22,11 @@ private:
 
     Config             cfg_;
     int                input_fd_ = -1;
-    RingBuffer<double> buffer_;
-    RingBuffer<double> buffer2_;    // two-graph mode, graph 2
+    std::vector<std::unique_ptr<RingBuffer<double> > > buffers_;
     StdinSource        source_;
     std::thread        reader_;
     std::atomic<bool>  running_{true};
-    std::atomic<bool>  rate_mode_;      // togglable at runtime with 'r'
+    std::atomic<bool>  rate_mode_;
     std::atomic<bool>  rate_reset_{false};
     std::atomic<bool>  eof_seen_{false};
 };

@@ -24,9 +24,9 @@ struct ChartOptions {
     double hard_min     = 0.0;
     ftxui::Color err_max_color = ftxui::Color::Red;
     ftxui::Color err_min_color = ftxui::Color::Red;
-    // Optional second dataset (two-graph mode)
-    const std::vector<double>* data2 = nullptr;
-    ftxui::Color color2 = ftxui::Color::White;
+    // Optional extra datasets (streams 2..N)
+    std::vector<const std::vector<double>*> extra_data;
+    std::vector<ftxui::Color> extra_colors;
 };
 
 // Draw a line chart onto a canvas
@@ -52,12 +52,12 @@ ftxui::Element make_sparkline(
     ftxui::Color color,
     const ChartOptions& opts = {});
 
-// Build the stats footer text (one or two graphs)
+// Build the stats footer text (one row per stream)
 ftxui::Element make_stats_bar(
-    const RingBuffer<double>::Stats& stats,
+    const std::vector<RingBuffer<double>::Stats>& all_stats,
     const std::string& unit,
     bool rate_mode = false,
-    const RingBuffer<double>::Stats* stats2 = nullptr);
+    const std::vector<std::string>& labels = {});
 
 // Build Y-axis tick labels
 ftxui::Element make_y_axis(double y_min, double y_max, int height_rows);
