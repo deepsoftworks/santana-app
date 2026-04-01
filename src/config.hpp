@@ -25,6 +25,7 @@ struct Config {
     bool         auto_min       = true;
     bool         auto_max       = true;
     bool         scroll         = false;
+    bool         no_scroll      = false;  // cosmetic fixed-frame indicator
     int          history        = 120;
     int          fps            = 16;
     ChartColor   color          = ChartColor::Green;

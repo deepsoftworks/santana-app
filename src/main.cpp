@@ -52,7 +52,9 @@ int main(int argc, char** argv) {
     auto* max_opt = app.add_option("--max", opt_max, "Fixed Y axis maximum (no error indicator)");
 
     app.add_flag("-s,--scroll", cfg.scroll, "Scroll mode");
+    app.add_flag("--no-scroll", cfg.no_scroll, "Fixed-frame mode (shows [FIXED] in title)");
     app.add_option("--history", cfg.history, "Number of data points to keep (default: 120)");
+    app.add_option("--window",  cfg.history, "Sliding window size (alias for --history)");
     app.add_option("--fps",     cfg.fps,     "Target refresh rate (default: 16)");
 
     std::string color_str = "green";

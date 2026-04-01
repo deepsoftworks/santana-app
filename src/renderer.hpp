@@ -35,4 +35,5 @@ private:
     std::atomic<bool>  rate_mode_;
     std::atomic<bool>  rate_reset_{false};
     std::atomic<bool>  eof_seen_{false};
+    std::atomic<bool>  history_view_{false};  // 'h': show only last N pts
 };

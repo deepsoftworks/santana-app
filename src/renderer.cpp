@@ -177,8 +177,10 @@ void Renderer::run() {
         int chart_w = std::max(10, term_w - 12);
 
         std::string title_str = cfg_.title;
-        if (!cfg_.unit.empty()) title_str += "  [" + cfg_.unit + "]";
-        if (rate_mode_.load())  title_str += "  (rate)";
+        if (!cfg_.unit.empty())       title_str += "  [" + cfg_.unit + "]";
+        if (rate_mode_.load())        title_str += "  (rate)";
+        if (cfg_.no_scroll)           title_str += "  [FIXED]";
+        if (history_view_.load())     title_str += "  [zoom]";
 
         // Snapshot all streams
         std::vector<std::vector<double> > all_data(static_cast<size_t>(cfg_.num_streams));
@@ -186,6 +188,15 @@ void Renderer::run() {
         for (int i = 0; i < cfg_.num_streams; ++i) {
             all_data[static_cast<size_t>(i)]  = buffers_[static_cast<size_t>(i)]->snapshot();
             all_stats[static_cast<size_t>(i)] = buffers_[static_cast<size_t>(i)]->stats();
+        }
+
+        // history_view: zoom into the last 20 data points
+        if (history_view_.load()) {
+            constexpr size_t kZoomWindow = 20;
+            for (auto& d : all_data) {
+                if (d.size() > kZoomWindow)
+                    d.erase(d.begin(), d.end() - static_cast<std::ptrdiff_t>(kZoomWindow));
+            }
         }
 
         // Build ChartOptions
@@ -258,6 +269,10 @@ void Renderer::run() {
             bool current = rate_mode_.load();
             rate_mode_.store(!current);
             rate_reset_.store(true);
+            return true;
+        }
+        if (e == Event::Character('h')) {
+            history_view_.store(!history_view_.load());
             return true;
         }
         // Ctrl+L: force full redraw
