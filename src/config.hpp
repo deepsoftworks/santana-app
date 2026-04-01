@@ -36,6 +36,7 @@ struct Config {
     std::vector<std::string> field_selectors; // JSON fields to extract (positional args)
     std::string  jq_path;                     // JSON dot-path, e.g. ".metrics.latency"
 
+    bool         log_scale      = false;
     bool         rate_mode      = false;
     char         plot_char      = '\0';
     char         err_max_char   = 'e';

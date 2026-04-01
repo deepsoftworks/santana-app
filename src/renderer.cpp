@@ -107,6 +107,7 @@ void Renderer::compute_range(double& y_min, double& y_max) const {
         y_min = data_min;
         double span = data_max - y_min;
         y_min -= span * 0.05;
+        if (cfg_.log_scale && y_min <= 0.0) y_min = 1e-3;
     } else {
         y_min = cfg_.y_min;
     }
@@ -210,6 +211,7 @@ void Renderer::run() {
         opts.hard_min     = cfg_.hard_min;
         opts.err_max_color = max_err_col;
         opts.err_min_color = min_err_col;
+        opts.log_scale     = cfg_.log_scale;
 
         for (int i = 1; i < cfg_.num_streams; ++i) {
             opts.extra_data.push_back(&all_data[static_cast<size_t>(i)]);
@@ -229,7 +231,7 @@ void Renderer::run() {
             chart_elem = make_line_chart(all_data[0], y_min, y_max, stream_colors[0], chart_w, chart_h, opts);
         }
 
-        Element y_axis_elem = make_y_axis(y_min, y_max, chart_h) | ftxui::color(axes_col);
+        Element y_axis_elem = make_y_axis(y_min, y_max, chart_h, cfg_.log_scale) | ftxui::color(axes_col);
 
         Element stats_elem = make_stats_bar(all_stats, cfg_.unit, rate_mode_.load(), cfg_.stream_labels)
                            | ftxui::color(text_col);
@@ -242,10 +244,16 @@ void Renderer::run() {
             });
         }
 
+        const bool has_legend = cfg_.num_streams > 1 && !cfg_.stream_labels.empty();
+
         Element plot_row = hbox({
             y_axis_elem | size(WIDTH, EQUAL, 9),
             separator()  | ftxui::color(axes_col),
             chart_elem   | flex,
+            has_legend ? hbox({
+                separator() | ftxui::color(axes_col),
+                make_legend(cfg_.stream_labels, stream_colors),
+            }) : filler() | size(WIDTH, EQUAL, 0),
         });
 
         return vbox({

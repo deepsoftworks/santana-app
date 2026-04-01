@@ -37,8 +37,16 @@ static double safe_range(double lo, double hi) {
     return (r < 1e-9) ? 1.0 : r;
 }
 
-static int value_to_y(double v, double y_min, double y_max, int canvas_h) {
-    double frac = (v - y_min) / safe_range(y_min, y_max);
+static int value_to_y(double v, double y_min, double y_max, int canvas_h, bool log_scale = false) {
+    double frac;
+    if (log_scale) {
+        double lv   = std::log10(std::max(v,    1e-10));
+        double lmin = std::log10(std::max(y_min, 1e-10));
+        double lmax = std::log10(std::max(y_max, 1e-10));
+        frac = (lv - lmin) / safe_range(lmin, lmax);
+    } else {
+        frac = (v - y_min) / safe_range(y_min, y_max);
+    }
     frac = std::clamp(frac, 0.0, 1.0);
     return static_cast<int>((1.0 - frac) * (canvas_h - 1));
 }
@@ -61,7 +69,8 @@ static void draw_dataset(
     double y_min, double y_max,
     Color color,
     char plot_char,
-    int cw, int ch)
+    int cw, int ch,
+    bool log_scale = false)
 {
     const int n = static_cast<int>(data.size());
     if (n == 0) return;
@@ -72,7 +81,7 @@ static void draw_dataset(
         for (int i = 0; i < n; ++i) {
             double xf = static_cast<double>(i) / std::max(1, n - 1);
             int px = static_cast<int>(xf * (cw - 1));
-            int py = value_to_y(data[i], y_min, y_max, ch);
+            int py = value_to_y(data[i], y_min, y_max, ch, log_scale);
             canvas.DrawText(px, py, ch_str, color);
         }
     } else {
@@ -82,8 +91,8 @@ static void draw_dataset(
             double x1f = static_cast<double>(i)     / std::max(1, n - 1);
             int x0 = static_cast<int>(x0f * (cw - 1));
             int x1 = static_cast<int>(x1f * (cw - 1));
-            int y0 = value_to_y(data[i - 1], y_min, y_max, ch);
-            int y1 = value_to_y(data[i],     y_min, y_max, ch);
+            int y0 = value_to_y(data[i - 1], y_min, y_max, ch, log_scale);
+            int y1 = value_to_y(data[i],     y_min, y_max, ch, log_scale);
             canvas.DrawPointLine(x0, y0, x1, y1, color);
         }
     }
@@ -97,6 +106,7 @@ static void draw_error_indicators(
     const ChartOptions& opts,
     int cw, int ch)
 {
+    (void)y_min; (void)y_max;
     const int n = static_cast<int>(data.size());
     for (int i = 0; i < n; ++i) {
         double xf = static_cast<double>(i) / std::max(1, n - 1);
@@ -132,11 +142,11 @@ Element make_line_chart(
             canvas.DrawPoint(x, gy, true, Color::GrayDark);
     }
 
-    draw_dataset(canvas, data, y_min, y_max, color, opts.plot_char, cw, ch);
+    draw_dataset(canvas, data, y_min, y_max, color, opts.plot_char, cw, ch, opts.log_scale);
 
     for (size_t i = 0; i < opts.extra_data.size(); ++i) {
         if (opts.extra_data[i] && !opts.extra_data[i]->empty())
-            draw_dataset(canvas, *opts.extra_data[i], y_min, y_max, opts.extra_colors[i], opts.plot_char, cw, ch);
+            draw_dataset(canvas, *opts.extra_data[i], y_min, y_max, opts.extra_colors[i], opts.plot_char, cw, ch, opts.log_scale);
     }
 
     draw_error_indicators(canvas, data, y_min, y_max, opts, cw, ch);
@@ -169,11 +179,12 @@ Element make_bar_chart(
     const int groups  = 1 + static_cast<int>(opts.extra_data.size());
     const double bar_w = static_cast<double>(cw) / (n * groups);
 
+    const bool log_scale_bar = opts.log_scale;
     auto draw_bars = [&](const std::vector<double>& d, Color c, int offset) {
         for (int i = 0; i < static_cast<int>(d.size()); ++i) {
             int x0 = static_cast<int>((i * groups + offset) * bar_w);
             int x1 = static_cast<int>((i * groups + offset + 1) * bar_w) - 1;
-            int y_top    = value_to_y(d[i], y_min, y_max, ch);
+            int y_top    = value_to_y(d[i], y_min, y_max, ch, log_scale_bar);
             int y_bottom = ch - 1;
             for (int x = x0; x <= x1; ++x)
                 for (int y = y_top; y <= y_bottom; ++y)
@@ -197,7 +208,8 @@ Element make_bar_chart(
 static Element make_spark_row(
     const std::vector<double>& data,
     double y_min, double y_max,
-    Color color)
+    Color color,
+    bool log_scale = false)
 {
     static const char* blocks[] = {" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"};
     constexpr int num_blocks = 8;
@@ -205,7 +217,15 @@ static Element make_spark_row(
     std::string line;
     line.reserve(data.size() * 3);
     for (auto v : data) {
-        double frac = (v - y_min) / safe_range(y_min, y_max);
+        double frac;
+        if (log_scale) {
+            double lv   = std::log10(std::max(v,    1e-10));
+            double lmin = std::log10(std::max(y_min, 1e-10));
+            double lmax = std::log10(std::max(y_max, 1e-10));
+            frac = (lv - lmin) / safe_range(lmin, lmax);
+        } else {
+            frac = (v - y_min) / safe_range(y_min, y_max);
+        }
         frac = std::clamp(frac, 0.0, 1.0);
         int idx = std::clamp(static_cast<int>(frac * num_blocks), 0, num_blocks);
         line += blocks[idx];
@@ -220,10 +240,10 @@ Element make_sparkline(
     const ChartOptions& opts)
 {
     Elements rows;
-    rows.push_back(make_spark_row(data, y_min, y_max, color));
+    rows.push_back(make_spark_row(data, y_min, y_max, color, opts.log_scale));
     for (size_t i = 0; i < opts.extra_data.size(); ++i) {
         if (opts.extra_data[i])
-            rows.push_back(make_spark_row(*opts.extra_data[i], y_min, y_max, opts.extra_colors[i]));
+            rows.push_back(make_spark_row(*opts.extra_data[i], y_min, y_max, opts.extra_colors[i], opts.log_scale));
     }
     if (rows.size() == 1) return rows[0];
     return vbox(std::move(rows));
@@ -276,14 +296,21 @@ Element make_stats_bar(
 
 // ─── Y axis ──────────────────────────────────────────────────────────────────
 
-Element make_y_axis(double y_min, double y_max, int height_rows) {
+Element make_y_axis(double y_min, double y_max, int height_rows, bool log_scale) {
     const int num_ticks = std::min(height_rows, 5);
     Elements ticks;
     ticks.reserve(static_cast<size_t>(num_ticks) + 1);
 
     for (int i = num_ticks - 1; i >= 0; --i) {
         double frac = static_cast<double>(i) / std::max(1, num_ticks - 1);
-        double v    = y_min + frac * (y_max - y_min);
+        double v;
+        if (log_scale) {
+            double lmin = std::log10(std::max(y_min, 1e-10));
+            double lmax = std::log10(std::max(y_max, 1e-10));
+            v = std::pow(10.0, lmin + frac * (lmax - lmin));
+        } else {
+            v = y_min + frac * (y_max - y_min);
+        }
         std::string label = fmt_val(v);
         while (static_cast<int>(label.size()) < 8) label = " " + label;
         ticks.push_back(text(label));
@@ -291,4 +318,24 @@ Element make_y_axis(double y_min, double y_max, int height_rows) {
     }
 
     return vbox(std::move(ticks));
+}
+
+// ─── Legend ──────────────────────────────────────────────────────────────────
+
+Element make_legend(
+    const std::vector<std::string>& labels,
+    const std::vector<ftxui::Color>& colors)
+{
+    Elements rows;
+    rows.reserve(labels.size());
+    for (size_t i = 0; i < labels.size(); ++i) {
+        Color c = (i < colors.size()) ? colors[i] : Color::Default;
+        rows.push_back(
+            hbox({
+                text("● ") | ftxui::color(c),
+                text(labels[i]),
+            })
+        );
+    }
+    return vbox(std::move(rows)) | border;
 }

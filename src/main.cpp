@@ -48,8 +48,13 @@ int main(int argc, char** argv) {
     app.add_option("-u,--unit", cfg.unit, "Unit label (e.g. MB/s, %)");
 
     double opt_min = 0.0, opt_max = 0.0;
-    auto* min_opt = app.add_option("--min", opt_min, "Fixed Y axis minimum (no error indicator)");
-    auto* max_opt = app.add_option("--max", opt_max, "Fixed Y axis maximum (no error indicator)");
+    auto* min_opt  = app.add_option("--min",   opt_min, "Fixed Y axis minimum (no error indicator)");
+    auto* max_opt  = app.add_option("--max",   opt_max, "Fixed Y axis maximum (no error indicator)");
+    auto* ymin_opt = app.add_option("--y-min", opt_min, "Fixed Y axis minimum (alias for --min)")
+                       ->excludes(min_opt);
+    auto* ymax_opt = app.add_option("--y-max", opt_max, "Fixed Y axis maximum (alias for --max)")
+                       ->excludes(max_opt);
+    app.add_flag("--log-scale", cfg.log_scale, "Logarithmic Y axis");
 
     app.add_flag("-s,--scroll", cfg.scroll, "Scroll mode");
     app.add_flag("--no-scroll", cfg.no_scroll, "Fixed-frame mode (shows [FIXED] in title)");
@@ -143,9 +148,9 @@ int main(int argc, char** argv) {
     else if (color_str == "white")  cfg.color = ChartColor::White;
     else                            cfg.color = ChartColor::Green;
 
-    // Fixed range (axis-only, no error indicator)
-    if (min_opt->count()) { cfg.auto_min = false; cfg.y_min = opt_min; }
-    if (max_opt->count()) { cfg.auto_max = false; cfg.y_max = opt_max; }
+    // Fixed range (axis-only, no error indicator); --y-min/--y-max are aliases
+    if (min_opt->count() || ymin_opt->count()) { cfg.auto_min = false; cfg.y_min = opt_min; }
+    if (max_opt->count() || ymax_opt->count()) { cfg.auto_max = false; cfg.y_max = opt_max; }
 
     // Hard limits (fix scale AND draw error indicator)
     if (hard_max_opt->count()) {

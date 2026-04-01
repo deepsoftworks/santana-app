@@ -24,6 +24,7 @@ struct ChartOptions {
     double hard_min     = 0.0;
     ftxui::Color err_max_color = ftxui::Color::Red;
     ftxui::Color err_min_color = ftxui::Color::Red;
+    bool log_scale = false;
     // Optional extra datasets (streams 2..N)
     std::vector<const std::vector<double>*> extra_data;
     std::vector<ftxui::Color> extra_colors;
@@ -60,4 +61,9 @@ ftxui::Element make_stats_bar(
     const std::vector<std::string>& labels = {});
 
 // Build Y-axis tick labels
-ftxui::Element make_y_axis(double y_min, double y_max, int height_rows);
+ftxui::Element make_y_axis(double y_min, double y_max, int height_rows, bool log_scale = false);
+
+// Build a color-coded legend panel (multi-stream only)
+ftxui::Element make_legend(
+    const std::vector<std::string>& labels,
+    const std::vector<ftxui::Color>& colors);
