@@ -21,6 +21,14 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(cli11)
 
+FetchContent_Declare(
+  nlohmann_json
+  GIT_REPOSITORY https://github.com/nlohmann/json
+  GIT_TAG        v3.11.3
+)
+set(JSON_BuildTests OFF CACHE INTERNAL "")
+FetchContent_MakeAvailable(nlohmann_json)
+
 add_executable(santana
   src/main.cpp
   src/parser.cpp
@@ -36,6 +44,7 @@ target_link_libraries(santana PRIVATE
   ftxui::dom
   ftxui::component
   CLI11::CLI11
+  nlohmann_json::nlohmann_json
 )
 
 target_compile_options(santana PRIVATE -Wall -Wextra -Wpedantic)

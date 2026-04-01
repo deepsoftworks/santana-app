@@ -14,7 +14,9 @@ class Renderer {
 public:
     Renderer(Config cfg, int input_fd,
              std::string first_line = "",
-             LineFormat fmt = LineFormat::Single);
+             LineFormat fmt = LineFormat::Single,
+             std::vector<std::string> field_selectors = {},
+             std::string jq_path = "");
     ~Renderer();
 
     // Blocks until the user quits (q or Esc)

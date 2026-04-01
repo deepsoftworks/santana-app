@@ -1,19 +1,21 @@
 #include "stdin_source.hpp"
 #include <cstdio>
-#include <cerrno>
-#include <cstring>
-#include <stdexcept>
 #include <poll.h>
 #include <unistd.h>
 
-StdinSource::StdinSource(int fd, std::string first_line, LineFormat fmt)
-    : fd_(fd), fmt_(fmt) {
+StdinSource::StdinSource(int fd, std::string first_line, LineFormat fmt,
+                         std::vector<std::string> field_selectors, std::string jq_path)
+    : fd_(fd)
+    , fmt_(fmt)
+    , field_selectors_(std::move(field_selectors))
+    , jq_path_(std::move(jq_path))
+{
     if (fd_ >= 0) {
         stream_ = ::fdopen(fd_, "r");
     }
     // Pre-queue the first line already consumed by main for format detection
     if (!first_line.empty()) {
-        auto vals = parse_line(first_line, fmt_);
+        auto vals = parse_line(first_line, fmt_, field_selectors_, jq_path_);
         if (!vals.empty()) {
             std::unique_lock<std::mutex> lock(mutex_);
             queue_.push_back(std::move(vals));
@@ -41,7 +43,6 @@ void StdinSource::poll() {
     pfd.fd     = fd_;
     pfd.events = POLLIN;
 
-    // Non-blocking poll with 50ms timeout
     int ret = ::poll(&pfd, 1, 50);
     if (ret <= 0) return;
     if (!(pfd.revents & POLLIN)) {
@@ -59,7 +60,7 @@ void StdinSource::poll() {
         return;
     }
 
-    auto vals = parse_line(buf, fmt_);
+    auto vals = parse_line(buf, fmt_, field_selectors_, jq_path_);
     if (!vals.empty()) {
         std::unique_lock<std::mutex> lock(mutex_);
         if (queue_.size() >= kMaxQueueSize) {

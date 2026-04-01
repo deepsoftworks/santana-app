@@ -12,7 +12,9 @@ class StdinSource : public DataSource {
 public:
     explicit StdinSource(int fd,
                          std::string first_line = "",
-                         LineFormat fmt = LineFormat::Single);
+                         LineFormat fmt = LineFormat::Single,
+                         std::vector<std::string> field_selectors = {},
+                         std::string jq_path = "");
     ~StdinSource() override;
 
     // Returns all values parsed from the next queued line.
@@ -30,10 +32,12 @@ public:
 private:
     static constexpr std::size_t kMaxQueueSize = 100000;
 
-    int                              fd_     = -1;
-    FILE*                            stream_ = nullptr;
-    LineFormat                       fmt_    = LineFormat::Single;
+    int                              fd_               = -1;
+    FILE*                            stream_           = nullptr;
+    LineFormat                       fmt_              = LineFormat::Single;
+    std::vector<std::string>         field_selectors_;
+    std::string                      jq_path_;
     mutable std::mutex               mutex_;
     std::deque<std::vector<double>>  queue_;
-    bool                             eof_    = false;
+    bool                             eof_              = false;
 };

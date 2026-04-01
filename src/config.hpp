@@ -31,7 +31,9 @@ struct Config {
 
     int          num_streams      = 1;     // -n: interleaved input streams (1-10)
     bool         explicit_streams = false; // true when -n/-2 was given explicitly
-    std::vector<std::string> stream_labels; // optional label per stream
+    std::vector<std::string> stream_labels;   // optional label per stream
+    std::vector<std::string> field_selectors; // JSON fields to extract (positional args)
+    std::string  jq_path;                     // JSON dot-path, e.g. ".metrics.latency"
 
     bool         rate_mode      = false;
     char         plot_char      = '\0';

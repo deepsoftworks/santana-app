@@ -78,6 +78,13 @@ int main(int argc, char** argv) {
     app.add_option("--labels", labels_str,
         "Comma-separated stream labels, e.g. cpu,mem,net");
 
+    app.add_option("--jq", cfg.jq_path,
+        "JSON dot-path to extract a single field, e.g. .metrics.latency");
+
+    app.add_option("fields", cfg.field_selectors,
+        "JSON field names to extract, e.g. santana latency cpu")
+        ->allow_extra_args()->expected(-1);
+
     app.add_flag("-r,--rate", cfg.rate_mode,
         "Rate mode: divide value by elapsed time between samples (for counters)");
 
@@ -206,15 +213,32 @@ int main(int argc, char** argv) {
             if (c == '\n') break;
         }
         if (!first_line.empty()) {
-            auto result     = detect_format(first_line);
-            detected_fmt    = result.fmt;
-            cfg.num_streams = std::max(1, result.num_values);
-            if (cfg.stream_labels.empty())
-                cfg.stream_labels = result.keys;
+            auto result  = detect_format(first_line);
+            detected_fmt = result.fmt;
+
+            if (!cfg.jq_path.empty()) {
+                // --jq: validate path exists in first object
+                auto v = parse_line(first_line, result.fmt, {}, cfg.jq_path);
+                if (v.empty()) {
+                    std::cerr << "error: --jq path '" << cfg.jq_path
+                              << "' not found or not numeric in first JSON object\n";
+                    ::close(input_fd);
+                    return 1;
+                }
+                cfg.num_streams = 1;
+                if (cfg.stream_labels.empty()) cfg.stream_labels = {cfg.jq_path};
+            } else if (!cfg.field_selectors.empty()) {
+                cfg.num_streams = static_cast<int>(cfg.field_selectors.size());
+                if (cfg.stream_labels.empty()) cfg.stream_labels = cfg.field_selectors;
+            } else {
+                cfg.num_streams = std::max(1, result.num_values);
+                if (cfg.stream_labels.empty()) cfg.stream_labels = result.keys;
+            }
         }
     }
 
-    Renderer renderer(cfg, input_fd, std::move(first_line), detected_fmt);
+    Renderer renderer(cfg, input_fd, std::move(first_line), detected_fmt,
+                      cfg.field_selectors, cfg.jq_path);
     renderer.run();
 
     return 0;

@@ -23,10 +23,12 @@ static const Color kStreamPalette[] = {
     Color::Default,
 };
 
-Renderer::Renderer(Config cfg, int input_fd, std::string first_line, LineFormat fmt)
+Renderer::Renderer(Config cfg, int input_fd, std::string first_line, LineFormat fmt,
+                   std::vector<std::string> field_selectors, std::string jq_path)
     : cfg_(std::move(cfg))
     , input_fd_(input_fd)
-    , source_(input_fd_, std::move(first_line), fmt)
+    , source_(input_fd_, std::move(first_line), fmt,
+              std::move(field_selectors), std::move(jq_path))
     , rate_mode_(cfg_.rate_mode)
 {
     cfg_.num_streams = std::max(1, std::min(10, cfg_.num_streams));
