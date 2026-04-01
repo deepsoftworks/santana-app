@@ -29,7 +29,8 @@ struct Config {
     int          fps            = 16;
     ChartColor   color          = ChartColor::Green;
 
-    int          num_streams    = 1;     // -n: interleaved input streams (1-10)
+    int          num_streams      = 1;     // -n: interleaved input streams (1-10)
+    bool         explicit_streams = false; // true when -n/-2 was given explicitly
     std::vector<std::string> stream_labels; // optional label per stream
 
     bool         rate_mode      = false;

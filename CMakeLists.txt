@@ -23,6 +23,7 @@ FetchContent_MakeAvailable(cli11)
 
 add_executable(santana
   src/main.cpp
+  src/parser.cpp
   src/stdin_source.cpp
   src/renderer.cpp
   src/chart.cpp

@@ -6,10 +6,18 @@
 #include <poll.h>
 #include <unistd.h>
 
-StdinSource::StdinSource(int fd)
-    : fd_(fd) {
+StdinSource::StdinSource(int fd, std::string first_line, LineFormat fmt)
+    : fd_(fd), fmt_(fmt) {
     if (fd_ >= 0) {
         stream_ = ::fdopen(fd_, "r");
+    }
+    // Pre-queue the first line already consumed by main for format detection
+    if (!first_line.empty()) {
+        auto vals = parse_line(first_line, fmt_);
+        if (!vals.empty()) {
+            std::unique_lock<std::mutex> lock(mutex_);
+            queue_.push_back(std::move(vals));
+        }
     }
 }
 
@@ -44,22 +52,20 @@ void StdinSource::poll() {
         return;
     }
 
-    char buf[256];
+    char buf[4096];
     if (!::fgets(buf, sizeof(buf), stream_)) {
         std::unique_lock<std::mutex> lock(mutex_);
         eof_ = true;
         return;
     }
 
-    char* end;
-    double val = std::strtod(buf, &end);
-    if (end != buf) {
+    auto vals = parse_line(buf, fmt_);
+    if (!vals.empty()) {
         std::unique_lock<std::mutex> lock(mutex_);
-        // Keep bounded memory under sustained producer > consumer load.
         if (queue_.size() >= kMaxQueueSize) {
             queue_.pop_front();
         }
-        queue_.push_back(val);
+        queue_.push_back(std::move(vals));
     }
 }
 
@@ -73,10 +79,18 @@ bool StdinSource::ready() const {
     return !queue_.empty();
 }
 
+std::vector<double> StdinSource::next_line() {
+    std::unique_lock<std::mutex> lock(mutex_);
+    if (queue_.empty()) return {};
+    auto row = std::move(queue_.front());
+    queue_.pop_front();
+    return row;
+}
+
 double StdinSource::next() {
     std::unique_lock<std::mutex> lock(mutex_);
     if (queue_.empty()) return 0.0;
-    double val = queue_.front();
+    double val = queue_.front().empty() ? 0.0 : queue_.front()[0];
     queue_.pop_front();
     return val;
 }

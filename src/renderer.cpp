@@ -23,10 +23,10 @@ static const Color kStreamPalette[] = {
     Color::Default,
 };
 
-Renderer::Renderer(Config cfg, int input_fd)
+Renderer::Renderer(Config cfg, int input_fd, std::string first_line, LineFormat fmt)
     : cfg_(std::move(cfg))
     , input_fd_(input_fd)
-    , source_(input_fd_)
+    , source_(input_fd_, std::move(first_line), fmt)
     , rate_mode_(cfg_.rate_mode)
 {
     cfg_.num_streams = std::max(1, std::min(10, cfg_.num_streams));
@@ -69,10 +69,19 @@ void Renderer::reader_thread() {
     while (running_) {
         source_.poll();
         while (source_.ready()) {
-            double raw = source_.next();
-            int idx = line_index % cfg_.num_streams;
-            push_value(raw, rs[static_cast<size_t>(idx)], *buffers_[static_cast<size_t>(idx)]);
-            ++line_index;
+            auto row = source_.next_line();
+            if (cfg_.explicit_streams) {
+                // Legacy round-robin: -n N flag, one value per line cycles through streams
+                int idx = line_index % cfg_.num_streams;
+                if (!row.empty())
+                    push_value(row[0], rs[static_cast<size_t>(idx)],
+                               *buffers_[static_cast<size_t>(idx)]);
+                ++line_index;
+            } else {
+                // Auto-detect: distribute each column to its stream
+                for (size_t i = 0; i < row.size() && i < buffers_.size(); ++i)
+                    push_value(row[i], rs[i], *buffers_[i]);
+            }
         }
         if (source_.is_eof()) {
             eof_seen_ = true;

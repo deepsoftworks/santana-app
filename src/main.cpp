@@ -1,4 +1,5 @@
 #include "config.hpp"
+#include "parser.hpp"
 #include "renderer.hpp"
 #include <CLI/CLI.hpp>
 #include <string>
@@ -69,7 +70,7 @@ int main(int argc, char** argv) {
     app.add_flag("-2", two_flag,
         "Read two interleaved streams (shorthand for -n 2)");
 
-    app.add_option("-n,--streams", cfg.num_streams,
+    auto* n_opt = app.add_option("-n,--streams", cfg.num_streams,
         "Number of interleaved input streams, 1-10 (default: 1)")
         ->check(CLI::Range(1, 10));
 
@@ -110,6 +111,7 @@ int main(int argc, char** argv) {
 
     // -2 is shorthand for -n 2; only apply if -n wasn't explicitly given
     if (two_flag && cfg.num_streams == 1) cfg.num_streams = 2;
+    if (two_flag || n_opt->count()) cfg.explicit_streams = true;
     cfg.num_streams = std::max(1, std::min(10, cfg.num_streams));
 
     // Parse stream labels
@@ -194,7 +196,25 @@ int main(int argc, char** argv) {
         ::close(tty_fd);
     }
 
-    Renderer renderer(cfg, input_fd);
+    // Auto-detect format and stream count from the first line when -n/-2 not given
+    std::string first_line;
+    LineFormat  detected_fmt = LineFormat::Single;
+    if (!cfg.explicit_streams) {
+        char c;
+        while (first_line.size() < 4096 && ::read(input_fd, &c, 1) == 1) {
+            first_line += c;
+            if (c == '\n') break;
+        }
+        if (!first_line.empty()) {
+            auto result     = detect_format(first_line);
+            detected_fmt    = result.fmt;
+            cfg.num_streams = std::max(1, result.num_values);
+            if (cfg.stream_labels.empty())
+                cfg.stream_labels = result.keys;
+        }
+    }
+
+    Renderer renderer(cfg, input_fd, std::move(first_line), detected_fmt);
     renderer.run();
 
     return 0;

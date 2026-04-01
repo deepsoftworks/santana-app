@@ -1,16 +1,20 @@
 #pragma once
 #include "config.hpp"
+#include "parser.hpp"
 #include "ring_buffer.hpp"
 #include "stdin_source.hpp"
 #include <thread>
 #include <atomic>
 #include <chrono>
 #include <memory>
+#include <string>
 #include <vector>
 
 class Renderer {
 public:
-    Renderer(Config cfg, int input_fd);
+    Renderer(Config cfg, int input_fd,
+             std::string first_line = "",
+             LineFormat fmt = LineFormat::Single);
     ~Renderer();
 
     // Blocks until the user quits (q or Esc)
