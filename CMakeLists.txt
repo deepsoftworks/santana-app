@@ -5,6 +5,8 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+enable_testing()
+
 include(FetchContent)
 
 FetchContent_Declare(
@@ -48,5 +50,20 @@ target_link_libraries(santana PRIVATE
 )
 
 target_compile_options(santana PRIVATE -Wall -Wextra -Wpedantic)
+
+add_executable(parser_tests
+  src/parser.cpp
+  tests/parser_tests.cpp
+)
+
+target_include_directories(parser_tests PRIVATE src)
+
+target_link_libraries(parser_tests PRIVATE
+  nlohmann_json::nlohmann_json
+)
+
+target_compile_options(parser_tests PRIVATE -Wall -Wextra -Wpedantic)
+
+add_test(NAME parser_tests COMMAND parser_tests)
 
 install(TARGETS santana DESTINATION bin)

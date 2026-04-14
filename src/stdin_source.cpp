@@ -3,22 +3,19 @@
 #include <poll.h>
 #include <unistd.h>
 
-StdinSource::StdinSource(int fd, std::string first_line, LineFormat fmt,
-                         std::vector<std::string> field_selectors, std::string jq_path)
+StdinSource::StdinSource(int fd, std::string first_line)
     : fd_(fd)
-    , fmt_(fmt)
-    , field_selectors_(std::move(field_selectors))
-    , jq_path_(std::move(jq_path))
 {
     if (fd_ >= 0) {
         stream_ = ::fdopen(fd_, "r");
     }
-    // Pre-queue the first line already consumed by main for format detection
+
+    // Pre-queue the first line already consumed by main.
     if (!first_line.empty()) {
-        auto vals = parse_line(first_line, fmt_, field_selectors_, jq_path_);
-        if (!vals.empty()) {
+        auto row = parse_line(first_line);
+        if (!row.empty()) {
             std::unique_lock<std::mutex> lock(mutex_);
-            queue_.push_back(std::move(vals));
+            queue_.push_back(std::move(row));
         }
     }
 }
@@ -60,13 +57,13 @@ void StdinSource::poll() {
         return;
     }
 
-    auto vals = parse_line(buf, fmt_, field_selectors_, jq_path_);
-    if (!vals.empty()) {
+    auto row = parse_line(buf);
+    if (!row.empty()) {
         std::unique_lock<std::mutex> lock(mutex_);
         if (queue_.size() >= kMaxQueueSize) {
             queue_.pop_front();
         }
-        queue_.push_back(std::move(vals));
+        queue_.push_back(std::move(row));
     }
 }
 
@@ -80,7 +77,7 @@ bool StdinSource::ready() const {
     return !queue_.empty();
 }
 
-std::vector<double> StdinSource::next_line() {
+ParsedRow StdinSource::next_line() {
     std::unique_lock<std::mutex> lock(mutex_);
     if (queue_.empty()) return {};
     auto row = std::move(queue_.front());
@@ -91,7 +88,7 @@ std::vector<double> StdinSource::next_line() {
 double StdinSource::next() {
     std::unique_lock<std::mutex> lock(mutex_);
     if (queue_.empty()) return 0.0;
-    double val = queue_.front().empty() ? 0.0 : queue_.front()[0];
+    double val = queue_.front().fields.empty() ? 0.0 : queue_.front().fields[0].value;
     queue_.pop_front();
     return val;
 }

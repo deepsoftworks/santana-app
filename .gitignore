@@ -26,3 +26,5 @@ _deps/
 santana
 stresstest
 stresstest.c
+
+build-*/

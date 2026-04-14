@@ -4,297 +4,273 @@
 #include <ftxui/screen/color.hpp>
 #include <algorithm>
 #include <cmath>
-#include <sstream>
 #include <iomanip>
+#include <sstream>
 
 using namespace ftxui;
 
-// ─── Color mapping ──────────────────────────────────────────────────────────
+namespace {
 
-Color resolve_color(ChartColor c) {
-    switch (c) {
-        case ChartColor::Cyan:   return Color::Cyan;
-        case ChartColor::Yellow: return Color::Yellow;
-        case ChartColor::Red:    return Color::Red;
-        case ChartColor::White:  return Color::White;
-        default:                 return Color::Green;
-    }
+double safe_range(double lo, double hi) {
+    const double range = hi - lo;
+    return (range < 1e-9) ? 1.0 : range;
 }
 
-Color resolve_elem_color(int idx, Color fallback) {
-    if (idx < 0) return fallback;
-    static const Color table[] = {
-        Color::Black, Color::Red, Color::Green, Color::Yellow,
-        Color::Blue,  Color::Magenta, Color::Cyan, Color::White,
-    };
-    return table[std::clamp(idx, 0, 7)];
-}
-
-// ─── Helpers ────────────────────────────────────────────────────────────────
-
-static double safe_range(double lo, double hi) {
-    double r = hi - lo;
-    return (r < 1e-9) ? 1.0 : r;
-}
-
-static int value_to_y(double v, double y_min, double y_max, int canvas_h, bool log_scale = false) {
-    double frac;
+int value_to_y(double value, double y_min, double y_max, int canvas_h, bool log_scale = false) {
+    double frac = 0.0;
     if (log_scale) {
-        double lv   = std::log10(std::max(v,    1e-10));
-        double lmin = std::log10(std::max(y_min, 1e-10));
-        double lmax = std::log10(std::max(y_max, 1e-10));
+        const double lv   = std::log10(std::max(value, 1e-10));
+        const double lmin = std::log10(std::max(y_min, 1e-10));
+        const double lmax = std::log10(std::max(y_max, 1e-10));
         frac = (lv - lmin) / safe_range(lmin, lmax);
     } else {
-        frac = (v - y_min) / safe_range(y_min, y_max);
+        frac = (value - y_min) / safe_range(y_min, y_max);
     }
+
     frac = std::clamp(frac, 0.0, 1.0);
     return static_cast<int>((1.0 - frac) * (canvas_h - 1));
 }
 
-static std::string fmt_val(double v) {
+std::string fmt_val(double value) {
     std::ostringstream ss;
-    if (std::abs(v) >= 1000.0)
-        ss << std::fixed << std::setprecision(0) << v;
-    else if (std::abs(v) >= 100.0)
-        ss << std::fixed << std::setprecision(1) << v;
-    else
-        ss << std::fixed << std::setprecision(2) << v;
+    if (std::abs(value) >= 1000.0) {
+        ss << std::fixed << std::setprecision(0) << value;
+    } else if (std::abs(value) >= 100.0) {
+        ss << std::fixed << std::setprecision(1) << value;
+    } else {
+        ss << std::fixed << std::setprecision(2) << value;
+    }
     return ss.str();
 }
 
-// Draw a single dataset onto the canvas (braille polyline or custom char)
-static void draw_dataset(
+std::string fmt_metric(double value, const std::string& unit, bool rate_mode) {
+    std::string result = fmt_val(value);
+    if (!unit.empty()) result += " " + unit;
+    if (rate_mode) result += "/s";
+    return result;
+}
+
+void draw_dataset(
     Canvas& canvas,
     const std::vector<double>& data,
-    double y_min, double y_max,
+    double y_min,
+    double y_max,
     Color color,
-    char plot_char,
-    int cw, int ch,
+    int cw,
+    int ch,
     bool log_scale = false)
 {
     const int n = static_cast<int>(data.size());
     if (n == 0) return;
 
-    if (plot_char != '\0') {
-        // Custom character: place at each data point's cell position
-        std::string ch_str(1, plot_char);
-        for (int i = 0; i < n; ++i) {
-            double xf = static_cast<double>(i) / std::max(1, n - 1);
-            int px = static_cast<int>(xf * (cw - 1));
-            int py = value_to_y(data[i], y_min, y_max, ch, log_scale);
-            canvas.DrawText(px, py, ch_str, color);
-        }
-    } else {
-        // Braille polyline
-        for (int i = 1; i < n; ++i) {
-            double x0f = static_cast<double>(i - 1) / std::max(1, n - 1);
-            double x1f = static_cast<double>(i)     / std::max(1, n - 1);
-            int x0 = static_cast<int>(x0f * (cw - 1));
-            int x1 = static_cast<int>(x1f * (cw - 1));
-            int y0 = value_to_y(data[i - 1], y_min, y_max, ch, log_scale);
-            int y1 = value_to_y(data[i],     y_min, y_max, ch, log_scale);
-            canvas.DrawPointLine(x0, y0, x1, y1, color);
-        }
+    for (int i = 1; i < n; ++i) {
+        const double x0f = static_cast<double>(i - 1) / std::max(1, n - 1);
+        const double x1f = static_cast<double>(i) / std::max(1, n - 1);
+        const int x0 = static_cast<int>(x0f * (cw - 1));
+        const int x1 = static_cast<int>(x1f * (cw - 1));
+        const int y0 = value_to_y(data[i - 1], y_min, y_max, ch, log_scale);
+        const int y1 = value_to_y(data[i], y_min, y_max, ch, log_scale);
+        canvas.DrawPointLine(x0, y0, x1, y1, color);
     }
 }
 
-// Draw error indicators for hard limits
-static void draw_error_indicators(
-    Canvas& canvas,
-    const std::vector<double>& data,
-    double y_min, double y_max,
-    const ChartOptions& opts,
-    int cw, int ch)
-{
-    (void)y_min; (void)y_max;
-    const int n = static_cast<int>(data.size());
-    for (int i = 0; i < n; ++i) {
-        double xf = static_cast<double>(i) / std::max(1, n - 1);
-        int px = static_cast<int>(xf * (cw - 1));
-        if (opts.has_hard_max && data[i] > opts.hard_max)
-            canvas.DrawText(px, 0, std::string(1, opts.err_max_char), opts.err_max_color);
-        if (opts.has_hard_min && data[i] < opts.hard_min)
-            canvas.DrawText(px, ch - 1, std::string(1, opts.err_min_char), opts.err_min_color);
-    }
+Element make_metric(const std::string& label, const std::string& value) {
+    return hbox({
+        text(label) | dim,
+        text(value) | bold,
+    });
 }
 
-// ─── Line chart ─────────────────────────────────────────────────────────────
+}  // namespace
 
 Element make_line_chart(
     const std::vector<double>& data,
-    double y_min, double y_max,
+    double y_min,
+    double y_max,
     Color color,
-    int width, int height,
+    int width,
+    int height,
     const ChartOptions& opts)
 {
-    const int cw = width  * 2;
+    const int cw = width * 2;
     const int ch = height * 4;
-
     Canvas canvas(cw, ch);
 
-    if (data.empty() && opts.extra_data.empty())
-        return ftxui::canvas(std::move(canvas));
+    if (data.empty() && opts.extra_data.empty()) return ftxui::canvas(std::move(canvas));
 
-    // Grid lines
-    for (int g = 1; g < 4; ++g) {
-        int gy = static_cast<int>(ch * g / 4.0);
-        for (int x = 0; x < cw; x += 4)
+    for (int row = 1; row < 4; ++row) {
+        const int gy = static_cast<int>(ch * row / 4.0);
+        for (int x = 0; x < cw; x += 4) {
             canvas.DrawPoint(x, gy, true, Color::GrayDark);
+        }
     }
 
-    draw_dataset(canvas, data, y_min, y_max, color, opts.plot_char, cw, ch, opts.log_scale);
-
+    draw_dataset(canvas, data, y_min, y_max, color, cw, ch, opts.log_scale);
     for (size_t i = 0; i < opts.extra_data.size(); ++i) {
-        if (opts.extra_data[i] && !opts.extra_data[i]->empty())
-            draw_dataset(canvas, *opts.extra_data[i], y_min, y_max, opts.extra_colors[i], opts.plot_char, cw, ch, opts.log_scale);
-    }
-
-    draw_error_indicators(canvas, data, y_min, y_max, opts, cw, ch);
-    for (size_t i = 0; i < opts.extra_data.size(); ++i) {
-        if (opts.extra_data[i] && !opts.extra_data[i]->empty())
-            draw_error_indicators(canvas, *opts.extra_data[i], y_min, y_max, opts, cw, ch);
+        if (opts.extra_data[i] && !opts.extra_data[i]->empty()) {
+            draw_dataset(canvas, *opts.extra_data[i], y_min, y_max, opts.extra_colors[i], cw, ch, opts.log_scale);
+        }
     }
 
     return ftxui::canvas(std::move(canvas));
 }
 
-// ─── Bar chart ───────────────────────────────────────────────────────────────
-
 Element make_bar_chart(
     const std::vector<double>& data,
-    double y_min, double y_max,
+    double y_min,
+    double y_max,
     Color color,
-    int width, int height,
+    int width,
+    int height,
     const ChartOptions& opts)
 {
-    const int cw = width  * 2;
+    const int cw = width * 2;
     const int ch = height * 4;
-
     Canvas canvas(cw, ch);
 
     if (data.empty()) return ftxui::canvas(std::move(canvas));
 
+    const int groups = 1 + static_cast<int>(opts.extra_data.size());
     const int n = static_cast<int>(data.size());
-    // Interleave bars across all series
-    const int groups  = 1 + static_cast<int>(opts.extra_data.size());
-    const double bar_w = static_cast<double>(cw) / (n * groups);
+    const double bar_width = static_cast<double>(cw) / std::max(1, n * groups);
 
-    const bool log_scale_bar = opts.log_scale;
-    auto draw_bars = [&](const std::vector<double>& d, Color c, int offset) {
-        for (int i = 0; i < static_cast<int>(d.size()); ++i) {
-            int x0 = static_cast<int>((i * groups + offset) * bar_w);
-            int x1 = static_cast<int>((i * groups + offset + 1) * bar_w) - 1;
-            int y_top    = value_to_y(d[i], y_min, y_max, ch, log_scale_bar);
-            int y_bottom = ch - 1;
-            for (int x = x0; x <= x1; ++x)
-                for (int y = y_top; y <= y_bottom; ++y)
-                    canvas.DrawPoint(x, y, true, c);
+    auto draw_bars = [&](const std::vector<double>& values, Color current_color, int offset) {
+        for (int i = 0; i < static_cast<int>(values.size()); ++i) {
+            const int x0 = static_cast<int>((i * groups + offset) * bar_width);
+            const int x1 = static_cast<int>((i * groups + offset + 1) * bar_width) - 1;
+            const int y_top = value_to_y(values[i], y_min, y_max, ch, opts.log_scale);
+            for (int x = x0; x <= x1; ++x) {
+                for (int y = y_top; y < ch; ++y) {
+                    canvas.DrawPoint(x, y, true, current_color);
+                }
+            }
         }
     };
 
     draw_bars(data, color, 0);
     for (size_t i = 0; i < opts.extra_data.size(); ++i) {
-        if (opts.extra_data[i] && !opts.extra_data[i]->empty())
+        if (opts.extra_data[i] && !opts.extra_data[i]->empty()) {
             draw_bars(*opts.extra_data[i], opts.extra_colors[i], static_cast<int>(i) + 1);
+        }
     }
-
-    draw_error_indicators(canvas, data, y_min, y_max, opts, cw, ch);
 
     return ftxui::canvas(std::move(canvas));
 }
 
-// ─── Sparkline ───────────────────────────────────────────────────────────────
-
 static Element make_spark_row(
     const std::vector<double>& data,
-    double y_min, double y_max,
-    Color color,
+    double y_min,
+    double y_max,
+    Color stream_color,
     bool log_scale = false)
 {
     static const char* blocks[] = {" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"};
     constexpr int num_blocks = 8;
+
     if (data.empty()) return text("");
+
     std::string line;
     line.reserve(data.size() * 3);
-    for (auto v : data) {
-        double frac;
+    for (double value : data) {
+        double frac = 0.0;
         if (log_scale) {
-            double lv   = std::log10(std::max(v,    1e-10));
-            double lmin = std::log10(std::max(y_min, 1e-10));
-            double lmax = std::log10(std::max(y_max, 1e-10));
+            const double lv   = std::log10(std::max(value, 1e-10));
+            const double lmin = std::log10(std::max(y_min, 1e-10));
+            const double lmax = std::log10(std::max(y_max, 1e-10));
             frac = (lv - lmin) / safe_range(lmin, lmax);
         } else {
-            frac = (v - y_min) / safe_range(y_min, y_max);
+            frac = (value - y_min) / safe_range(y_min, y_max);
         }
         frac = std::clamp(frac, 0.0, 1.0);
-        int idx = std::clamp(static_cast<int>(frac * num_blocks), 0, num_blocks);
-        line += blocks[idx];
+        const int index = std::clamp(static_cast<int>(frac * num_blocks), 0, num_blocks);
+        line += blocks[index];
     }
-    return text(line) | ftxui::color(color);
+
+    return text(line) | ftxui::color(stream_color);
 }
 
 Element make_sparkline(
     const std::vector<double>& data,
-    double y_min, double y_max,
+    double y_min,
+    double y_max,
     Color color,
     const ChartOptions& opts)
 {
     Elements rows;
     rows.push_back(make_spark_row(data, y_min, y_max, color, opts.log_scale));
     for (size_t i = 0; i < opts.extra_data.size(); ++i) {
-        if (opts.extra_data[i])
+        if (opts.extra_data[i]) {
             rows.push_back(make_spark_row(*opts.extra_data[i], y_min, y_max, opts.extra_colors[i], opts.log_scale));
+        }
     }
-    if (rows.size() == 1) return rows[0];
-    return vbox(std::move(rows));
+
+    return rows.size() == 1 ? rows.front() : vbox(std::move(rows));
 }
 
-// ─── Stats bar ───────────────────────────────────────────────────────────────
-
-Element make_stats_bar(
+Element make_status_panel(
     const std::vector<RingBuffer<double>::Stats>& all_stats,
+    const std::vector<std::string>& labels,
+    const std::vector<ftxui::Color>& colors,
     const std::string& unit,
     bool rate_mode,
-    const std::vector<std::string>& labels)
+    size_t max_rows,
+    bool eof_seen)
 {
-    auto lbl = [](const std::string& k, const std::string& v) {
-        return hbox({ text(k) | dim, text(v) | bold });
-    };
+    const size_t total_rows = all_stats.size();
+    const size_t visible_rows = (max_rows == 0) ? total_rows : std::min(total_rows, max_rows);
+    const size_t hidden_rows = (visible_rows < total_rows) ? total_rows - visible_rows : 0;
 
-    std::string u = unit.empty() ? "" : " " + unit;
-    std::string rate_tag = rate_mode ? "/s" : "";
-
-    auto row = [&](const RingBuffer<double>::Stats& s, const std::string& label) {
-        Elements elems;
-        if (!label.empty())
-            elems.push_back(text("[" + label + "] ") | bold);
-        elems.push_back(lbl(" cur: ", fmt_val(s.current) + u + rate_tag));
-        elems.push_back(text("  "));
-        elems.push_back(lbl("min: ", fmt_val(static_cast<double>(s.min_val)) + u + rate_tag));
-        elems.push_back(text("  "));
-        elems.push_back(lbl("max: ", fmt_val(static_cast<double>(s.max_val)) + u + rate_tag));
-        elems.push_back(text("  "));
-        elems.push_back(lbl("avg: ", fmt_val(s.mean) + u + rate_tag));
-        elems.push_back(text("  "));
-        elems.push_back(lbl("n: ", std::to_string(s.count)));
-        elems.push_back(filler());
-        return hbox(std::move(elems));
-    };
-
-    if (all_stats.size() == 1) {
-        std::string label = labels.empty() ? "" : labels[0];
-        return row(all_stats[0], label);
+    size_t label_width = 8;
+    for (size_t i = 0; i < visible_rows; ++i) {
+        if (i < labels.size()) label_width = std::max(label_width, labels[i].size());
     }
+    label_width = std::min<size_t>(label_width, 18);
 
     Elements rows;
-    for (size_t i = 0; i < all_stats.size(); ++i) {
-        std::string label = (i < labels.size()) ? labels[i] : "";
-        rows.push_back(row(all_stats[i], label));
-    }
-    return vbox(std::move(rows));
-}
+    rows.push_back(hbox({
+        text(" streams ") | bold | ftxui::color(Color::Cyan),
+        filler(),
+        text(std::to_string(total_rows) + " active") | dim,
+    }));
+    rows.push_back(separator());
 
-// ─── Y axis ──────────────────────────────────────────────────────────────────
+    if (all_stats.empty()) {
+        rows.push_back(text("waiting for data...") | dim);
+    } else {
+        for (size_t i = 0; i < visible_rows; ++i) {
+            const auto stream_color = colors.empty() ? Color::Green : colors[i % colors.size()];
+            const auto& stats = all_stats[i];
+            const std::string label = (i < labels.size() && !labels[i].empty())
+                ? labels[i]
+                : "stream " + std::to_string(i + 1);
+
+            rows.push_back(hbox({
+                text("● ") | ftxui::color(stream_color),
+                text(label) | bold | size(WIDTH, EQUAL, static_cast<int>(label_width)),
+                text("  "),
+                make_metric("now ", fmt_metric(stats.current, unit, rate_mode)),
+                text("  "),
+                make_metric("min ", fmt_metric(static_cast<double>(stats.min_val), unit, rate_mode)),
+                text("  "),
+                make_metric("max ", fmt_metric(static_cast<double>(stats.max_val), unit, rate_mode)),
+                text("  "),
+                make_metric("avg ", fmt_metric(stats.mean, unit, rate_mode)),
+                text("  "),
+                make_metric("n ", std::to_string(stats.count)),
+                filler(),
+            }));
+        }
+    }
+
+    if (hidden_rows > 0) {
+        rows.push_back(text("+" + std::to_string(hidden_rows) + " more streams") | dim);
+    }
+    if (eof_seen) {
+        rows.push_back(text("input closed") | dim | ftxui::color(Color::Yellow));
+    }
+
+    return vbox(std::move(rows)) | border;
+}
 
 Element make_y_axis(double y_min, double y_max, int height_rows, bool log_scale) {
     const int num_ticks = std::min(height_rows, 5);
@@ -302,40 +278,21 @@ Element make_y_axis(double y_min, double y_max, int height_rows, bool log_scale)
     ticks.reserve(static_cast<size_t>(num_ticks) + 1);
 
     for (int i = num_ticks - 1; i >= 0; --i) {
-        double frac = static_cast<double>(i) / std::max(1, num_ticks - 1);
-        double v;
+        const double frac = static_cast<double>(i) / std::max(1, num_ticks - 1);
+        double value = 0.0;
         if (log_scale) {
-            double lmin = std::log10(std::max(y_min, 1e-10));
-            double lmax = std::log10(std::max(y_max, 1e-10));
-            v = std::pow(10.0, lmin + frac * (lmax - lmin));
+            const double lmin = std::log10(std::max(y_min, 1e-10));
+            const double lmax = std::log10(std::max(y_max, 1e-10));
+            value = std::pow(10.0, lmin + frac * (lmax - lmin));
         } else {
-            v = y_min + frac * (y_max - y_min);
+            value = y_min + frac * (y_max - y_min);
         }
-        std::string label = fmt_val(v);
+
+        std::string label = fmt_val(value);
         while (static_cast<int>(label.size()) < 8) label = " " + label;
         ticks.push_back(text(label));
         if (i > 0) ticks.push_back(filler());
     }
 
     return vbox(std::move(ticks));
-}
-
-// ─── Legend ──────────────────────────────────────────────────────────────────
-
-Element make_legend(
-    const std::vector<std::string>& labels,
-    const std::vector<ftxui::Color>& colors)
-{
-    Elements rows;
-    rows.reserve(labels.size());
-    for (size_t i = 0; i < labels.size(); ++i) {
-        Color c = (i < colors.size()) ? colors[i] : Color::Default;
-        rows.push_back(
-            hbox({
-                text("● ") | ftxui::color(c),
-                text(labels[i]),
-            })
-        );
-    }
-    return vbox(std::move(rows)) | border;
 }

@@ -12,129 +12,112 @@
 ░▒▓███████▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░ ░▒▓█▓▒░  ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░
 ```
 
-*Work in progress-PRs welcome*
+`Santana` is a realtime terminal data plotter for logs and numeric streams.
 
-`Santana` is a highly customizable real-time terminal data visualization interface.
+<p align="center">
+    <a href="https://github.com/deepsoftworks/santana-app/stargazers"><img src="https://img.shields.io/github/stars/deepsoftworks/santana-app?style=flat&color=yellow" alt="Stars"></a>
+    <a href="https://github.com/deepsoftworks/santana-app/commits/main"><img src="https://img.shields.io/github/last-commit/deepsoftworks/santana-app?style=flat" alt="Last Commit"></a>
+    <a href="LICENSE"><img src="https://img.shields.io/github/license/deepsoftworks/santana-app?style=flat" alt="License"></a>
+    <a href="#"><img src="https://img.shields.io/github/repo-size/deepsoftworks/santana"></a>
+</p>
 
-<img src="examples/network.gif" width="49%"/> <img src="examples/sine.gif" width="49%"/>
-<img src="examples/load.gif" width="49%"/> <img src="examples/http.gif" width="49%"/>
+## What It Does
 
+Pipe output like `python main.py | santana` and Santana will auto-detect fields and plot them live in the terminal.
+
+It understands:
+
+- single numeric values
+- whitespace-separated numeric rows
+- CSV rows
+- JSON objects and arrays
+- freeform logs with numeric fields, for example:
+
+```text
+[LOG] a=3, y=4 b:5; r 4
+```
+
+That line becomes four streams: `a`, `y`, `b`, and `r`.
 
 ## Features
 
-- **Zero-config multi-series** — pipe whitespace or CSV rows and streams are detected automatically
-- **First-class JSON** — flat objects, nested paths, arrays; field selection and `--jq` dot-paths
-- **Three chart types**: line (braille-dot polyline), bar, sparkline
-- **Auto-scaling** Y axis with optional fixed min/max and `--log-scale`
-- **Stats footer + legend**: current | min | max | mean | count, with color-coded legend for multi-stream
-- **Streaming window control**: `--window N`, `--no-scroll`, `h` key to zoom
-- **Color themes**: green, cyan, yellow, red, white + named schemes
-- **Responsive**: adapts to terminal resize instantly
-- **ttyplot-compatible**: pipe any newline-delimited numeric stream
+- Auto field extraction from structured logs with no field-selection flags.
+- Dynamic stream discovery, including fields that appear later in the input.
+- Three modes: `line`, `bar`, and `spark`.
+- Fixed or auto Y-range with optional `--log-scale`.
+- Compact bottom status panel with per-stream current, min, max, avg, and count.
+- Works well for counter-style logs via `--rate`.
 
 ## Build
 
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j$(nproc)   # Linux
-cmake --build build -j$(sysctl -n hw.logicalcpu)  # macOS
+# macOS
+cmake -S . -B build-mod -G Ninja -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CXX_COMPILER=/opt/homebrew/opt/llvm/bin/clang++
+cmake --build build-mod -j"$(sysctl -n hw.logicalcpu)"
+
+# Linux
+cmake -S . -B build-mod -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=clang++
+cmake --build build-mod -j"$(nproc)"
 ```
-
-Requires: CMake ≥ 3.20, C++20 compiler.
-Dependencies (FTXUI v5.0.0, CLI11 v2.4.1, nlohmann/json v3.11.3) are fetched automatically.
-
 
 ## Usage
 
-```
-santana [OPTIONS] [fields...]
+```bash
+./build-mod/santana [options]
 ```
 
-### Input formats (auto-detected)
+### Common pipelines
 
 ```bash
-# Single value per line (original behavior)
-echo 42 | santana
+# One value per line
+yes 42 | ./build-mod/santana
 
-# Whitespace-separated — N values → N streams, auto-labeled s1 s2 s3
-echo "1.2 3.4 5.6" | santana
+# Python logs with named fields
+python main.py | ./build-mod/santana
 
-# CSV — same but comma-delimited
-echo "1.2,3.4,5.6" | santana
+# Freeform logs
+printf '[LOG] a=3, y=4 b:5; r 4\n' | ./build-mod/santana
 
-# JSON object — keys become stream labels
-echo '{"latency":12,"cpu":45}' | santana
+# JSON
+printf '{"latency":12,"cpu":45}\n' | ./build-mod/santana
 
-# JSON object — extract specific fields in order
-echo '{"latency":12,"cpu":45,"mem":80}' | santana latency mem
-
-# JSON object — navigate a nested path (single stream)
-echo '{"metrics":{"latency":12}}' | santana --jq .metrics.latency
-
-# JSON array
-echo '[10, 20, 30]' | santana
+# Counter streams
+./examples/network.sh | ./build-mod/santana --title "Network" --unit B --rate
 ```
 
 ### Options
 
-```
-  -h,--help                   Print this help message and exit
-  -V,--version                Display program version information and exit
-
-Input:
-  fields                      JSON field names to extract (positional)
-  --jq TEXT                   JSON dot-path to extract, e.g. .metrics.latency
-  -n,--streams INT            Number of interleaved streams, 1-10 (overrides auto-detect)
-  -2                          Shorthand for -n 2
-
-Chart:
-  -t,--title TEXT             Chart title
-  -m,--mode TEXT:{line,bar,spark}
-                              Chart type (default: line)
-  -u,--unit TEXT              Unit label, e.g. MB/s
-  --color TEXT:{green,cyan,yellow,red,white}
-                              Primary stream color (default: green)
-  --color2 TEXT               Second stream color
-  -C,--colors TEXT            Per-element colors: plot[,axes,text,title,max_err,min_err] (0-7)
-                                Named schemes: dark1, dark2, light1, light2, vampire
-  -c,--char TEXT              Plot character (default: braille)
-  --labels TEXT               Comma-separated stream labels, e.g. cpu,mem,net
-
-Y axis:
-  --min,--y-min FLOAT         Fixed Y axis minimum
-  --max,--y-max FLOAT         Fixed Y axis maximum
-  --log-scale                 Logarithmic Y axis
-  --scale FLOAT               Initial soft scale (autoscale can exceed this)
-  --hard-min FLOAT            Hard minimum — draws error indicator if breached
-  --hard-max FLOAT            Hard maximum — draws error indicator if breached
-  -e,--error-max-char TEXT    Overflow indicator character (default: e)
-  -E,--error-min-char TEXT    Underflow indicator character (default: v)
-
-Window:
-  --history,--window INT      Sliding buffer size in data points (default: 120)
-  --no-scroll                 Fixed-frame mode (shows [FIXED] in title)
-  --fps INT                   Refresh rate (default: 16)
-
-Modes:
-  -r,--rate                   Rate mode: values divided by elapsed time (for counters)
+```text
+  -t,--title TEXT     Chart title
+  -m,--mode TEXT      line, bar, or spark
+  -u,--unit TEXT      Unit label
+  --min FLOAT         Fixed Y axis minimum
+  --max FLOAT         Fixed Y axis maximum
+  --log-scale         Logarithmic Y axis
+  --history INT       Samples to keep per stream
+  --fps INT           UI refresh rate
+  -r,--rate           Plot deltas per second for counters
 ```
 
 ### Interactive keys
 
-| Key | Action |
-|-----|--------|
-| `q` / `Esc` | Quit |
-| `r` | Toggle rate mode |
-| `h` | Toggle zoom (last 20 points) |
-| `Ctrl+L` | Force redraw |
+- `q` / `Esc`: quit
+- `r`: toggle rate mode
+- `Ctrl+L`: force redraw
 
 ## Examples
 
+Only two demos ship with Santana now:
+
 ```bash
-./examples/exp.sh            # standalone demo signal
-./examples/exp.sh load       # system load (1m/5m)
-./examples/exp.sh memory     # memory usage %
-./examples/exp.sh network    # rx/tx throughput
-./examples/exp.sh http       # synthetic HTTP traffic
+./examples/network.sh
+./examples/memory_usage.sh
 ```
 
+Both scripts also support raw output, so you can pipe them into your own Santana command:
+
+```bash
+SANTANA_EXAMPLE_RAW=1 ./examples/network.sh | ./build-mod/santana --title "Network" --unit B --rate
+SANTANA_EXAMPLE_RAW=1 ./examples/memory_usage.sh | ./build-mod/santana --title "Memory Usage" --unit % --min 0 --max 100
+```
