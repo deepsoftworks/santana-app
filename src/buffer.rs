@@ -1,11 +1,9 @@
-use std::collections::VecDeque;
-
+/// Growable buffer that retains all history.
 #[derive(Debug, Clone)]
 pub struct RingBuffer {
-    data:     VecDeque<f64>,
-    capacity: usize,
-    sum:      f64,
-    count:    u64, // total ever pushed
+    data:  Vec<f64>,
+    sum:   f64,
+    count: u64,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -18,22 +16,16 @@ pub struct Stats {
 }
 
 impl RingBuffer {
-    pub fn new(capacity: usize) -> Self {
+    pub fn new(_capacity: usize) -> Self {
         Self {
-            data: VecDeque::with_capacity(capacity),
-            capacity,
+            data: Vec::with_capacity(256),
             sum: 0.0,
             count: 0,
         }
     }
 
     pub fn push(&mut self, value: f64) {
-        if self.data.len() == self.capacity {
-            // Fix vs C++: subtract evicted value so sum stays correct
-            let evicted = self.data.pop_front().unwrap();
-            self.sum -= evicted;
-        }
-        self.data.push_back(value);
+        self.data.push(value);
         self.sum += value;
         self.count += 1;
     }
@@ -50,7 +42,7 @@ impl RingBuffer {
         if self.data.is_empty() {
             return Stats::default();
         }
-        let current = *self.data.back().unwrap();
+        let current = *self.data.last().unwrap();
         let min = self.data.iter().cloned().fold(f64::INFINITY, f64::min);
         let max = self.data.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
         let mean = self.sum / self.data.len() as f64;
@@ -62,22 +54,7 @@ impl RingBuffer {
         let len = self.data.len();
         let end = len.saturating_sub(pan);
         let start = end.saturating_sub(zoom);
-        self.data.range(start..end).cloned().collect()
-    }
-
-    pub fn snapshot(&self) -> Vec<f64> {
-        self.data.iter().cloned().collect()
-    }
-
-    pub fn resize(&mut self, new_cap: usize) {
-        let snap: Vec<f64> = self.snapshot();
-        self.capacity = new_cap;
-        self.data.clear();
-        self.sum = 0.0;
-        for v in snap.iter().rev().take(new_cap).rev().cloned() {
-            self.data.push_back(v);
-            self.sum += v;
-        }
+        self.data[start..end].to_vec()
     }
 }
 
@@ -86,14 +63,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_eviction_sum() {
+    fn test_push_grows() {
         let mut rb = RingBuffer::new(3);
         rb.push(1.0);
         rb.push(2.0);
         rb.push(3.0);
-        rb.push(4.0); // evicts 1.0
-        // sum should be 2+3+4=9
-        assert!((rb.stats().mean - 3.0).abs() < 1e-9);
+        rb.push(4.0);
+        // All data retained
+        assert_eq!(rb.len(), 4);
+        assert!((rb.stats().mean - 2.5).abs() < 1e-9);
     }
 
     #[test]

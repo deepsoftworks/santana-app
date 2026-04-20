@@ -56,6 +56,24 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
         spans.push(Span::raw(" "));
     }
 
+    // Idle (no data for 2+ seconds)
+    if state.idle && !state.eof && !state.paused {
+        spans.push(Span::styled(
+            "[WAITING]",
+            Style::default().fg(theme.eof_color).bold(),
+        ));
+        spans.push(Span::raw(" "));
+    }
+
+    // EOF
+    if state.eof {
+        spans.push(Span::styled(
+            "[EOF]",
+            Style::default().fg(theme.eof_color).bold(),
+        ));
+        spans.push(Span::raw(" "));
+    }
+
     // Y-locked
     if state.y_locked {
         spans.push(indicator("y-locked", true, theme));

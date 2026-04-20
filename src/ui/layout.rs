@@ -88,11 +88,11 @@ pub fn compute_grid(area: Rect, n: usize) -> Vec<Rect> {
     panes
 }
 
-/// Split an area into a narrow Y-axis column (9 chars) and the chart canvas.
+/// Split an area into a narrow Y-axis column (9 chars), a gap, and the chart canvas.
 pub fn split_yaxis_chart(chart_area: Rect) -> (Rect, Rect) {
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Length(9), Constraint::Min(1)])
+        .constraints([Constraint::Length(9), Constraint::Length(1), Constraint::Min(1)])
         .split(chart_area);
-    (chunks[0], chunks[1])
+    (chunks[0], chunks[2])
 }

@@ -19,6 +19,7 @@ const KEYBINDINGS: &[(&str, &str)] = &[
     (".  /  >", "Pan right (newer data)"),
     ("↑ / ↓", "Select stream"),
     ("t", "Toggle selected stream visibility"),
+    ("T", "Toggle all other streams"),
     ("y", "Lock / unlock Y-axis scale"),
     ("?", "Toggle this help overlay"),
     ("Ctrl+L", "Force redraw"),
@@ -33,7 +34,7 @@ pub fn render(frame: &mut Frame, area: Rect, theme: &Theme) {
         ("+/-", "zoom"),
         (",/.", "pan"),
         ("↑↓", "select"),
-        ("t", "toggle"),
+        ("t/T", "toggle"),
         ("y", "y-lock"),
         ("?", "help"),
     ];

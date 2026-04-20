@@ -8,6 +8,7 @@ use ratatui::{
 
 use crate::app::AppState;
 use crate::ui::charts::fmt_metric;
+use crate::ui::theme::stream_symbol;
 
 pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
     if area.height == 0 {
@@ -38,16 +39,20 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
     let mut rows: Vec<Row> = shown
         .iter()
         .map(|(slot_idx, slot)| {
-            let sc = &state.theme.streams[slot.color_idx % state.theme.streams.len()];
             let is_selected = *slot_idx == state.selected_idx;
-            let bullet = if slot.visible { "● " } else { "○ " };
+            let sym = stream_symbol(slot.color_idx);
+            let bullet = if slot.visible {
+                format!("{} ", sym)
+            } else {
+                format!("({}) ", sym)
+            };
             let row_style = if is_selected {
                 Style::default().bg(state.theme.selected_bg)
             } else {
                 Style::default()
             };
             let label_style = if slot.visible {
-                Style::default().fg(sc.bullet).bold()
+                Style::default().fg(state.theme.title).bold()
             } else {
                 Style::default().fg(state.theme.dim)
             };

@@ -1,28 +1,35 @@
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Style, Stylize},
-    text::{Line, Span},
+    style::{Color, Style, Stylize},
+    text::Span,
     widgets::{
         canvas::{Canvas, Line as CanvasLine},
-        Bar, BarChart, BarGroup, Paragraph, Sparkline,
+        Bar, BarChart, BarGroup, Paragraph,
     },
 };
 
 use crate::app::{AppState, StreamSnapshot};
 use crate::config::ChartMode;
 use crate::ui::layout::{compute_grid, split_yaxis_chart};
-use crate::ui::theme::{gradient_color, Theme};
+use crate::ui::theme::{gradient_color, stream_symbol, Theme};
 
 // ── value formatting ──────────────────────────────────────────────────────────
 
 pub fn fmt_val(value: f64) -> String {
-    if value.abs() >= 1000.0 {
-        format!("{:.0}", value)
-    } else if value.abs() >= 100.0 {
+    if value == 0.0 {
+        return "0".to_string();
+    }
+    let abs = value.abs();
+    if abs >= 1000.0 || abs < 0.01 {
+        // Scientific notation, 3 significant digits
+        format!("{:.2e}", value)
+    } else if abs >= 100.0 {
         format!("{:.1}", value)
-    } else {
+    } else if abs >= 10.0 {
         format!("{:.2}", value)
+    } else {
+        format!("{:.3}", value)
     }
 }
 
@@ -98,11 +105,15 @@ impl YRange {
 // ── Y-axis labels ─────────────────────────────────────────────────────────────
 
 pub fn render_yaxis(frame: &mut Frame, area: Rect, yr: &YRange, log_scale: bool, theme: &Theme) {
-    let n_ticks = (area.height as usize).min(5).max(2);
-    let mut lines = Vec::with_capacity(n_ticks * 2);
+    if area.height == 0 {
+        return;
+    }
 
-    for i in (0..n_ticks).rev() {
-        let frac = i as f64 / (n_ticks - 1).max(1) as f64;
+    let n_ticks = (area.height as usize / 3).clamp(2, 6);
+
+    for tick in 0..n_ticks {
+        // frac=1.0 at top, frac=0.0 at bottom
+        let frac = if n_ticks <= 1 { 0.5 } else { tick as f64 / (n_ticks - 1) as f64 };
         let value = if log_scale {
             let lmin = yr.min.max(1e-10).log10();
             let lmax = yr.max.max(1e-10).log10();
@@ -111,15 +122,23 @@ pub fn render_yaxis(frame: &mut Frame, area: Rect, yr: &YRange, log_scale: bool,
             yr.min + frac * (yr.max - yr.min)
         };
 
-        let label = format!("{:>8}", fmt_val(value));
-        lines.push(Line::from(Span::styled(label, Style::default().fg(theme.axis))));
-        if i > 0 {
-            lines.push(Line::from("")); // spacer
+        // Position: frac=1 → row 0 (top), frac=0 → row height-1 (bottom)
+        let row = ((1.0 - frac) * (area.height.saturating_sub(1)) as f64).round() as u16;
+        if row >= area.height {
+            continue;
         }
-    }
 
-    let para = Paragraph::new(lines).alignment(Alignment::Right);
-    frame.render_widget(para, area);
+        let label = format!("{:>9}", fmt_val(value));
+        let label_area = Rect {
+            x: area.x,
+            y: area.y + row,
+            width: area.width,
+            height: 1,
+        };
+        let para = Paragraph::new(Span::styled(label, Style::default().fg(theme.axis)))
+            .alignment(Alignment::Right);
+        frame.render_widget(para, label_area);
+    }
 }
 
 // ── Braille line chart ────────────────────────────────────────────────────────
@@ -156,6 +175,9 @@ fn render_line_canvas(
         (y_lo, y_hi)
     };
 
+    let grad_start = theme.grad_start;
+    let grad_end = theme.grad_end;
+
     let canvas = Canvas::default()
         .x_bounds([0.0, 1.0])
         .y_bounds([y_b, y_t])
@@ -172,25 +194,24 @@ fn render_line_canvas(
                 });
             }
 
-            // Each stream
+            // Each stream — monochrome gradient, same for all
             for snap in &visible {
                 let data = &snap.data;
                 let n = data.len();
                 if n < 2 {
                     continue;
                 }
-                let sc = &theme.streams[snap.color_idx % theme.streams.len()];
                 for i in 1..n {
                     let t0 = (i - 1) as f64 / (n - 1) as f64;
                     let t1 = i as f64 / (n - 1) as f64;
-                    let color = gradient_color(sc.grad_start, sc.grad_end, t1);
+                    let color = gradient_color(grad_start, grad_end, t1);
                     let y0 = transform_y(data[i - 1]);
                     let y1 = transform_y(data[i]);
                     ctx.draw(&CanvasLine {
                         x1: t0,
-                        y1: if log_scale { y0 } else { y0 },
+                        y1: y0,
                         x2: t1,
-                        y2: if log_scale { y1 } else { y1 },
+                        y2: y1,
                         color,
                     });
                 }
@@ -198,6 +219,44 @@ fn render_line_canvas(
         });
 
     frame.render_widget(canvas, area);
+
+    // Render stream symbol labels at the right edge of each line
+    if area.width > 2 && area.height > 0 {
+        let y_range = y_t - y_b;
+        for snap in &visible {
+            if let Some(&last_val) = snap.data.last() {
+                let y_norm = if y_range.abs() < 1e-9 {
+                    0.5
+                } else {
+                    let y_transformed = if log_scale {
+                        transform_y(last_val)
+                    } else {
+                        last_val
+                    };
+                    (y_transformed - y_b) / y_range
+                };
+                // Map normalized y (0=bottom, 1=top) to row
+                let row = ((1.0 - y_norm) * (area.height.saturating_sub(1)) as f64)
+                    .round()
+                    .clamp(0.0, (area.height.saturating_sub(1)) as f64) as u16;
+                let sym = stream_symbol(snap.color_idx);
+                let label = format!("{} {}", sym, &snap.label);
+                let label_len = label.len().min(area.width as usize - 1);
+                let label_area = Rect {
+                    x: area.x + area.width - label_len as u16 - 1,
+                    y: area.y + row,
+                    width: label_len as u16 + 1,
+                    height: 1,
+                };
+                let color = gradient_color(grad_start, grad_end, 1.0);
+                let para = Paragraph::new(Span::styled(
+                    label,
+                    Style::default().fg(color).bold(),
+                ));
+                frame.render_widget(para, label_area);
+            }
+        }
+    }
 }
 
 // ── Sparkline chart ───────────────────────────────────────────────────────────
@@ -225,25 +284,79 @@ fn render_sparklines(
     let scale = if range < 1e-9 { 1.0 } else { 1.0 / range };
 
     for (i, snap) in visible.iter().enumerate() {
-        let sc = &theme.streams[snap.color_idx % theme.streams.len()];
-        let spark_data: Vec<u64> = snap
-            .data
-            .iter()
-            .map(|&v| {
-                let norm = ((v - yr.min) * scale).clamp(0.0, 1.0);
-                (norm * 100.0) as u64
+        let row_area = rows[i];
+        let width = row_area.width as usize;
+        let data = &snap.data;
+        let data_len = data.len();
+
+        // Show last `width` points
+        let start = data_len.saturating_sub(width);
+        let shown = &data[start..];
+        let num_cols = shown.len();
+
+        // Build one BarGroup per column with gradient
+        let groups: Vec<BarGroup> = (0..num_cols)
+            .map(|col| {
+                let t = if num_cols <= 1 { 1.0 } else { col as f64 / (num_cols - 1) as f64 };
+                let color = gradient_color(theme.grad_start, theme.grad_end, t);
+                let norm = ((shown[col] - yr.min) * scale).clamp(0.0, 1.0);
+                let val = (norm * 100.0) as u64;
+                let bar = Bar::default()
+                    .value(val)
+                    .text_value(String::new())
+                    .style(Style::default().fg(color));
+                BarGroup::default().bars(&[bar])
             })
             .collect();
 
-        let spark = Sparkline::default()
-            .data(&spark_data)
-            .max(100)
-            .style(Style::default().fg(sc.bullet));
-        frame.render_widget(spark, rows[i]);
+        let mut chart = BarChart::default()
+            .bar_gap(0)
+            .group_gap(0)
+            .bar_width(1)
+            .max(100);
+        for group in &groups {
+            chart = chart.data(group.clone());
+        }
+        frame.render_widget(chart, row_area);
+
+        // Stream symbol label
+        let sym = stream_symbol(snap.color_idx);
+        let label_color = gradient_color(theme.grad_start, theme.grad_end, 1.0);
+        if row_area.width > 4 {
+            let lbl = format!("{} {}", sym, &snap.label);
+            let lbl_area = Rect {
+                x: row_area.x,
+                y: row_area.y,
+                width: (lbl.len() as u16 + 1).min(row_area.width),
+                height: 1,
+            };
+            let para = Paragraph::new(Span::styled(
+                lbl,
+                Style::default().fg(label_color).bold(),
+            ));
+            frame.render_widget(para, lbl_area);
+        }
     }
 }
 
 // ── Bar chart ─────────────────────────────────────────────────────────────────
+
+/// Per-stream brightness offsets to differentiate bars within a group.
+const STREAM_BRIGHTNESS: &[f64] = &[1.0, 0.65, 0.45, 0.80, 0.55, 0.35, 0.90, 0.50, 0.70, 0.40, 0.60, 0.75];
+
+fn stream_bar_color(theme: &Theme, time_t: f64, stream_idx: usize) -> Color {
+    let base = gradient_color(theme.grad_start, theme.grad_end, time_t);
+    let brightness = STREAM_BRIGHTNESS[stream_idx % STREAM_BRIGHTNESS.len()];
+    if let Color::Rgb(r, g, b) = base {
+        Color::Rgb(
+            (r as f64 * brightness) as u8,
+            (g as f64 * brightness) as u8,
+            (b as f64 * brightness) as u8,
+        )
+    } else {
+        base
+    }
+}
 
 fn render_bars(
     frame: &mut Frame,
@@ -260,42 +373,45 @@ fn render_bars(
     let range = yr.max - yr.min;
     let scale = if range < 1e-9 { 1.0 } else { 1.0 / range };
 
-    // Show only the last `area.width` samples across all streams
-    let max_bars = area.width as usize / visible.len().max(1);
-    let max_bars = max_bars.max(1);
+    // Each group = N bars (one per stream) + 1 gap column
+    let group_width = visible.len() + 1; // bars + group gap
+    let max_groups = area.width as usize / group_width.max(1);
+    let max_groups = max_groups.max(1);
 
-    // Only render bars for data points that actually exist
+    // Only render groups for data points that actually exist
     let actual_len = visible.iter().map(|s| s.data.len()).max().unwrap_or(0);
-    let num_bars = actual_len.min(max_bars);
+    let num_groups = actual_len.min(max_groups);
 
-    let groups: Vec<BarGroup> = (0..num_bars)
+    let groups: Vec<BarGroup> = (0..num_groups)
         .map(|i| {
+            let t = if num_groups <= 1 { 1.0 } else { i as f64 / (num_groups - 1) as f64 };
+
             let bars: Vec<Bar> = visible
                 .iter()
-                .map(|snap| {
-                    let idx = if snap.data.len() > num_bars {
-                        snap.data.len() - num_bars + i
+                .enumerate()
+                .map(|(si, snap)| {
+                    let idx = if snap.data.len() > num_groups {
+                        snap.data.len() - num_groups + i
                     } else if i < snap.data.len() {
                         i
                     } else {
-                        // No data for this bar position in this stream
                         return Bar::default().value(0).text_value(String::new())
-                            .style(Style::default().fg(theme.streams[snap.color_idx % theme.streams.len()].bullet));
+                            .style(Style::default().fg(stream_bar_color(theme, t, si)));
                     };
                     let v = snap.data[idx];
                     let val = ((v - yr.min) * scale * 100.0).clamp(0.0, 100.0) as u64;
-                    let sc = &theme.streams[snap.color_idx % theme.streams.len()];
+                    let color = stream_bar_color(theme, t, si);
                     Bar::default()
                         .value(val)
-                        .text_value(String::new()) // suppress numeric labels
-                        .style(Style::default().fg(sc.bullet))
+                        .text_value(String::new())
+                        .style(Style::default().fg(color))
                 })
                 .collect();
             BarGroup::default().bars(&bars)
         })
         .collect();
 
-    let mut chart = BarChart::default().bar_gap(0).max(100);
+    let mut chart = BarChart::default().bar_gap(0).group_gap(1).max(100);
     for group in &groups {
         chart = chart.data(group.clone());
     }
@@ -334,7 +450,8 @@ fn render_split_pane(
         let (yaxis_area, canvas_area) = split_yaxis_chart(*pane);
         render_yaxis(frame, yaxis_area, &yr, state.config.log_scale, theme);
 
-        let sc = &theme.streams[snap.color_idx % theme.streams.len()];
+        let grad_start = theme.grad_start;
+        let grad_end = theme.grad_end;
         let data = &snap.data;
         let n = data.len();
         let canvas = Canvas::default()
@@ -349,7 +466,7 @@ fn render_split_pane(
                     for i in 1..n {
                         let t1 = i as f64 / (n - 1) as f64;
                         let t0 = (i - 1) as f64 / (n - 1) as f64;
-                        let color = gradient_color(sc.grad_start, sc.grad_end, t1);
+                        let color = gradient_color(grad_start, grad_end, t1);
                         ctx.draw(&CanvasLine {
                             x1: t0, y1: data[i - 1],
                             x2: t1, y2: data[i],
@@ -361,9 +478,11 @@ fn render_split_pane(
         frame.render_widget(canvas, canvas_area);
 
         // Stream label in top-left corner
+        let sym = stream_symbol(snap.color_idx);
+        let label_color = gradient_color(grad_start, grad_end, 1.0);
         let label = Paragraph::new(Span::styled(
-            snap.label.clone(),
-            Style::default().fg(sc.bullet).bold(),
+            format!("{} {}", sym, &snap.label),
+            Style::default().fg(label_color).bold(),
         ));
         let label_area = Rect {
             x: canvas_area.x + 1,

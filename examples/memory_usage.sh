@@ -3,10 +3,10 @@ set -euo pipefail
 
 if [[ -t 1 && "${SANTANA_EXAMPLE_RAW:-0}" != "1" ]]; then
     ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-    SANTANA_BIN="${SANTANA_BIN:-$ROOT_DIR/target/release/santana}"
+    SANTANA_BIN="${SANTANA_BIN:-$ROOT_DIR/target/debug/santana}"
     if [[ ! -x "$SANTANA_BIN" ]]; then
         echo "santana binary not found at $SANTANA_BIN" >&2
-        echo "Build first: cargo build --release" >&2
+        echo "Build first: cargo build --debug" >&2
         exit 1
     fi
 

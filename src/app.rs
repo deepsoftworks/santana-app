@@ -86,11 +86,13 @@ pub struct AppState {
     pub mode:         ChartMode,
     pub rate_mode:    bool,
     pub show_help:    bool,
-    pub eof:          bool,
-    pub fps_display:  f64,
-    pub last_render:  Instant,
-    pub theme:        Theme,
-    pub rx:           Receiver<Option<ParsedRow>>,
+    pub eof:            bool,
+    pub idle:           bool,
+    pub fps_display:    f64,
+    pub last_render:    Instant,
+    pub last_data_time: Option<Instant>,
+    pub theme:          Theme,
+    pub rx:             Receiver<Option<ParsedRow>>,
 }
 
 impl AppState {
@@ -112,8 +114,10 @@ impl AppState {
             rate_mode,
             show_help: false,
             eof: false,
+            idle: false,
             fps_display: 0.0,
             last_render: Instant::now(),
+            last_data_time: None,
             theme,
             config,
             rx,
@@ -149,9 +153,15 @@ fn drain_channel(state: &mut AppState) {
     let now = Instant::now();
     let history = state.config.history;
 
+    // Track max stream length before draining so we can adjust pan
+    let len_before = state.streams.slots.iter().map(|s| s.buffer.len()).max().unwrap_or(0);
+
+    let mut received_data = false;
+
     for _ in 0..10_000 {
         match state.rx.try_recv() {
             Ok(Some(row)) => {
+                received_data = true;
                 for field in row.fields {
                     let idx = state.streams.ensure_slot(&field.key, history);
                     let slot = &mut state.streams.slots[idx];
@@ -180,6 +190,23 @@ fn drain_channel(state: &mut AppState) {
             }
         }
     }
+
+    if received_data {
+        state.last_data_time = Some(now);
+        state.idle = false;
+    } else if !state.eof {
+        // Consider idle after 2 seconds with no data (only if we've received data before)
+        if let Some(last) = state.last_data_time {
+            state.idle = now.duration_since(last).as_secs_f64() >= 2.0;
+        }
+    }
+
+    // When panned, auto-increment pan so the view stays anchored in place
+    if state.pan > 0 {
+        let len_after = state.streams.slots.iter().map(|s| s.buffer.len()).max().unwrap_or(0);
+        let added = len_after.saturating_sub(len_before);
+        state.pan += added;
+    }
 }
 
 // ── Key handler ───────────────────────────────────────────────────────────────
@@ -203,7 +230,8 @@ fn handle_key(state: &mut AppState, key: KeyEvent) -> bool {
             state.zoom = (state.zoom / 2).max(10);
         }
         KeyCode::Char('-') => {
-            state.zoom = (state.zoom * 2).min(state.config.history);
+            let max_len = state.streams.slots.iter().map(|s| s.buffer.len()).max().unwrap_or(state.config.history);
+            state.zoom = (state.zoom * 2).min(max_len.max(state.config.history));
         }
         KeyCode::Char(',') | KeyCode::Char('<') => {
             let max_pan = state
@@ -213,10 +241,12 @@ fn handle_key(state: &mut AppState, key: KeyEvent) -> bool {
                 .map(|s| s.buffer.len().saturating_sub(state.zoom))
                 .max()
                 .unwrap_or(0);
-            state.pan = (state.pan + state.zoom / 4).min(max_pan);
+            let step = (state.zoom / 4).max(1);
+            state.pan = (state.pan + step).min(max_pan);
         }
         KeyCode::Char('.') | KeyCode::Char('>') => {
-            state.pan = state.pan.saturating_sub(state.zoom / 4);
+            let step = (state.zoom / 4).max(1);
+            state.pan = state.pan.saturating_sub(step);
         }
         KeyCode::Up => {
             state.selected_idx = state.selected_idx.saturating_sub(1);
@@ -230,6 +260,13 @@ fn handle_key(state: &mut AppState, key: KeyEvent) -> bool {
         KeyCode::Char('t') => {
             if let Some(slot) = state.streams.slots.get_mut(state.selected_idx) {
                 slot.visible = !slot.visible;
+            }
+        }
+        KeyCode::Char('T') => {
+            for (i, slot) in state.streams.slots.iter_mut().enumerate() {
+                if i != state.selected_idx {
+                    slot.visible = !slot.visible;
+                }
             }
         }
         KeyCode::Char('y') => {
@@ -265,7 +302,8 @@ fn handle_key(state: &mut AppState, key: KeyEvent) -> bool {
 fn handle_mouse(state: &mut AppState, mouse: crossterm::event::MouseEvent) {
     match mouse.kind {
         MouseEventKind::ScrollDown => {
-            state.zoom = (state.zoom * 2).min(state.config.history);
+            let max_len = state.streams.slots.iter().map(|s| s.buffer.len()).max().unwrap_or(state.config.history);
+            state.zoom = (state.zoom * 2).min(max_len.max(state.config.history));
         }
         MouseEventKind::ScrollUp => {
             state.zoom = (state.zoom / 2).max(10);
