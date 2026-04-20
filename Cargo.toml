@@ -2,7 +2,7 @@
 name = "santana"
 version = "2.0.0"
 edition = "2021"
-description = "Live terminal data visualization — pipe anything, chart everything"
+description = "Live terminal data visualization. Pipe anything, plot everything"
 
 [[bin]]
 name = "santana"
@@ -10,7 +10,7 @@ path = "src/main.rs"
 
 [dependencies]
 ratatui = "0.29"
-crossterm = "0.28"
+crossterm = { version = "0.28", features = ["use-dev-tty"] }
 clap = { version = "4", features = ["derive"] }
 serde_json = "1"
 crossbeam-channel = "0.5"

@@ -59,12 +59,15 @@ impl YRange {
             return YRange { min: y_lock_min, max: y_lock_max };
         }
 
+        // Compute min/max from the visible (zoomed/panned) data, not full history
         let mut data_min = f64::INFINITY;
         let mut data_max = f64::NEG_INFINITY;
 
         for snap in snapshots.iter().filter(|s| s.visible && !s.data.is_empty()) {
-            data_min = data_min.min(snap.stats.min);
-            data_max = data_max.max(snap.stats.max);
+            for &v in &snap.data {
+                data_min = data_min.min(v);
+                data_max = data_max.max(v);
+            }
         }
 
         if !data_min.is_finite() {
@@ -261,20 +264,31 @@ fn render_bars(
     let max_bars = area.width as usize / visible.len().max(1);
     let max_bars = max_bars.max(1);
 
-    let groups: Vec<BarGroup> = (0..max_bars)
+    // Only render bars for data points that actually exist
+    let actual_len = visible.iter().map(|s| s.data.len()).max().unwrap_or(0);
+    let num_bars = actual_len.min(max_bars);
+
+    let groups: Vec<BarGroup> = (0..num_bars)
         .map(|i| {
             let bars: Vec<Bar> = visible
                 .iter()
                 .map(|snap| {
-                    let idx = if snap.data.len() > max_bars {
-                        snap.data.len() - max_bars + i
+                    let idx = if snap.data.len() > num_bars {
+                        snap.data.len() - num_bars + i
+                    } else if i < snap.data.len() {
+                        i
                     } else {
-                        i.min(snap.data.len().saturating_sub(1))
+                        // No data for this bar position in this stream
+                        return Bar::default().value(0).text_value(String::new())
+                            .style(Style::default().fg(theme.streams[snap.color_idx % theme.streams.len()].bullet));
                     };
-                    let v = snap.data.get(idx).cloned().unwrap_or(0.0);
+                    let v = snap.data[idx];
                     let val = ((v - yr.min) * scale * 100.0).clamp(0.0, 100.0) as u64;
                     let sc = &theme.streams[snap.color_idx % theme.streams.len()];
-                    Bar::default().value(val).style(Style::default().fg(sc.bullet))
+                    Bar::default()
+                        .value(val)
+                        .text_value(String::new()) // suppress numeric labels
+                        .style(Style::default().fg(sc.bullet))
                 })
                 .collect();
             BarGroup::default().bars(&bars)

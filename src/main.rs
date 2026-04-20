@@ -5,8 +5,6 @@ mod parser;
 mod source;
 mod ui;
 
-use std::ffi::CString;
-
 use anyhow::{bail, Result};
 use clap::Parser;
 
@@ -91,31 +89,12 @@ fn main() -> Result<()> {
         theme:     cli.theme,
     };
 
-    // ── TTY dup dance (must happen before crossterm initializes) ──────────────
-    // 1. Duplicate the piped stdin fd so the reader thread can use it
+    // Duplicate the piped stdin fd so the reader thread can consume data from it,
+    // while crossterm (with use-dev-tty feature) opens /dev/tty directly for input.
     let data_fd = unsafe { libc::dup(libc::STDIN_FILENO) };
     if data_fd < 0 {
         bail!("Failed to duplicate stdin fd");
     }
 
-    // 2. Re-open /dev/tty as stdin so crossterm can read keyboard events
-    if unsafe { libc::isatty(libc::STDIN_FILENO) } == 0 {
-        let tty_path = CString::new("/dev/tty").unwrap();
-        let tty_fd = unsafe { libc::open(tty_path.as_ptr(), libc::O_RDONLY) };
-        if tty_fd < 0 {
-            unsafe { libc::close(data_fd) };
-            bail!("Failed to open /dev/tty for interactive input");
-        }
-        if unsafe { libc::dup2(tty_fd, libc::STDIN_FILENO) } < 0 {
-            unsafe {
-                libc::close(tty_fd);
-                libc::close(data_fd);
-            }
-            bail!("Failed to redirect /dev/tty to stdin");
-        }
-        unsafe { libc::close(tty_fd) };
-    }
-
-    // 3. Run the app
     app::run(config, data_fd)
 }

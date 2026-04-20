@@ -3,10 +3,10 @@ set -euo pipefail
 
 if [[ -t 1 && "${SANTANA_EXAMPLE_RAW:-0}" != "1" ]]; then
     ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-    SANTANA_BIN="${SANTANA_BIN:-$ROOT_DIR/build-mod/santana}"
+    SANTANA_BIN="${SANTANA_BIN:-$ROOT_DIR/target/release/santana}"
     if [[ ! -x "$SANTANA_BIN" ]]; then
         echo "santana binary not found at $SANTANA_BIN" >&2
-        echo "Build first: cmake -S . -B build-mod -G Ninja && cmake --build build-mod" >&2
+        echo "Build first: cargo build --release" >&2
         exit 1
     fi
 

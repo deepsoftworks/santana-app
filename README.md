@@ -8,7 +8,7 @@
 ░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░ ░▒▓█▓▒░  ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░
  ░▒▓██████▓▒░░▒▓████████▓▒░▒▓█▓▒░░▒▓█▓▒░ ░▒▓█▓▒░  ░▒▓████████▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓████████▓▒░
        ░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░ ░▒▓█▓▒░  ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░
-       ░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░ ░▒▓█▓▒░  ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░
+       ░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░ ░▒▓█▓▒░  ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░▒▓█▓▒░
 ░▒▓███████▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░ ░▒▓█▓▒░  ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░
 ```
 
@@ -27,11 +27,11 @@ Pipe output like `python main.py | santana` and Santana will auto-detect fields 
 
 It understands:
 
-- single numeric values
-- whitespace-separated numeric rows
+- Single numeric values
+- Whitespace-separated numeric rows
 - CSV rows
 - JSON objects and arrays
-- freeform logs with numeric fields, for example:
+- Freeform logs with numeric fields, for example:
 
 ```text
 [LOG] a=3, y=4 b:5; r 4
@@ -39,85 +39,99 @@ It understands:
 
 That line becomes four streams: `a`, `y`, `b`, and `r`.
 
-## Features
-
-- Auto field extraction from structured logs with no field-selection flags.
-- Dynamic stream discovery, including fields that appear later in the input.
-- Three modes: `line`, `bar`, and `spark`.
-- Fixed or auto Y-range with optional `--log-scale`.
-- Compact bottom status panel with per-stream current, min, max, avg, and count.
-- Works well for counter-style logs via `--rate`.
-
 ## Build
 
-```bash
-# macOS
-cmake -S . -B build-mod -G Ninja -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_CXX_COMPILER=/opt/homebrew/opt/llvm/bin/clang++
-cmake --build build-mod -j"$(sysctl -n hw.logicalcpu)"
+Requires Rust 1.75+.
 
-# Linux
-cmake -S . -B build-mod -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=clang++
-cmake --build build-mod -j"$(nproc)"
+```bash
+cargo build --release
 ```
+
+The binary lands at `target/release/santana`.
 
 ## Usage
 
 ```bash
-./build-mod/santana [options]
+./target/release/santana [options]
 ```
 
 ### Common pipelines
 
 ```bash
 # One value per line
-yes 42 | ./build-mod/santana
+yes 42 | santana
 
 # Python logs with named fields
-python main.py | ./build-mod/santana
+python main.py | santana
 
 # Freeform logs
-printf '[LOG] a=3, y=4 b:5; r 4\n' | ./build-mod/santana
+printf '[LOG] a=3, y=4 b:5; r 4\n' | santana
 
 # JSON
-printf '{"latency":12,"cpu":45}\n' | ./build-mod/santana
+printf '{"latency":12,"cpu":45}\n' | santana
 
-# Counter streams
-./examples/network.sh | ./build-mod/santana --title "Network" --unit B --rate
+# Counter streams (plot deltas/s)
+./examples/network.sh | santana --title "Network" --unit B --rate
+
+# Memory usage with fixed Y range
+./examples/memory_usage.sh | santana --title "Memory" --unit % --min 0 --max 100
+
+# Only chart fields matching a pattern
+kubectl top pods --no-headers | santana --filter "cpu|memory"
 ```
 
 ### Options
 
 ```text
-  -t,--title TEXT     Chart title
-  -m,--mode TEXT      line, bar, or spark
-  -u,--unit TEXT      Unit label
-  --min FLOAT         Fixed Y axis minimum
-  --max FLOAT         Fixed Y axis maximum
-  --log-scale         Logarithmic Y axis
-  --history INT       Samples to keep per stream
-  --fps INT           UI refresh rate
-  -r,--rate           Plot deltas per second for counters
+  -t, --title TEXT      Chart title [default: santana]
+  -m, --mode TEXT       line, bar, spark, overlay, or split [default: line]
+  -u, --unit TEXT       Unit label (e.g. MB/s, %)
+      --min FLOAT       Fixed Y axis minimum
+      --max FLOAT       Fixed Y axis maximum
+      --log-scale       Logarithmic Y axis
+      --history INT     Samples to keep per stream [default: 120]
+      --fps INT         UI refresh rate [default: 16]
+  -r, --rate            Plot deltas per second for counters
+      --filter REGEX    Only capture fields whose keys match this pattern
+      --theme TEXT      Color theme: dark, light, solarized, nord [default: dark]
 ```
 
 ### Interactive keys
 
-- `q` / `Esc`: quit
-- `r`: toggle rate mode
-- `Ctrl+L`: force redraw
+| Key | Action |
+|-----|--------|
+| `q` / `Esc` | Quit |
+| `m` | Cycle chart mode (line → bar → spark → overlay → split) |
+| `r` | Toggle rate mode (delta/s) |
+| `Space` | Pause / resume data ingestion |
+| `+` / `-` | Zoom in / out |
+| `,` / `.` | Pan left / right through history |
+| `↑` / `↓` | Select stream |
+| `t` | Toggle selected stream visibility |
+| `y` | Lock / unlock Y-axis scale |
+| `?` | Help overlay |
+| `Ctrl+L` | Force redraw |
+
+## Chart Modes
+
+| Mode | Description |
+|------|-------------|
+| `line` | Braille-based line chart per stream |
+| `bar` | Grouped vertical bars |
+| `spark` | Compact sparklines, one row per stream |
+| `overlay` | All streams overlaid on a single canvas |
+| `split` | Each stream in its own pane, auto-scaled independently |
 
 ## Examples
-
-Only two demos ship with Santana now:
 
 ```bash
 ./examples/network.sh
 ./examples/memory_usage.sh
 ```
 
-Both scripts also support raw output, so you can pipe them into your own Santana command:
+Both scripts support raw output for custom pipelines:
 
 ```bash
-SANTANA_EXAMPLE_RAW=1 ./examples/network.sh | ./build-mod/santana --title "Network" --unit B --rate
-SANTANA_EXAMPLE_RAW=1 ./examples/memory_usage.sh | ./build-mod/santana --title "Memory Usage" --unit % --min 0 --max 100
+SANTANA_EXAMPLE_RAW=1 ./examples/network.sh | santana --title "Network" --unit B --rate
+SANTANA_EXAMPLE_RAW=1 ./examples/memory_usage.sh | santana --title "Memory Usage" --unit % --min 0 --max 100
 ```
