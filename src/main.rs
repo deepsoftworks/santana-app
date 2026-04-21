@@ -23,7 +23,7 @@ struct Cli {
     #[arg(short, long, default_value = "santana")]
     title: String,
 
-    /// Chart type: line, bar, spark, overlay, split
+    /// Chart type: line, bar, split
     #[arg(short, long, value_enum, default_value = "line")]
     mode: ChartMode,
 
@@ -52,7 +52,7 @@ struct Cli {
     fps: u8,
 
     /// Plot deltas per second (rate mode)
-    #[arg(short, long)]
+    #[arg(short, long, default_value_t = false)]
     rate: bool,
 
     /// Only capture fields whose keys match this regex
@@ -76,17 +76,17 @@ fn main() -> Result<()> {
         .map_err(|e| anyhow::anyhow!("Invalid filter regex: {}", e))?;
 
     let config = Config {
-        title:     cli.title,
-        mode:      cli.mode,
-        unit:      cli.unit,
-        y_min:     cli.min,
-        y_max:     cli.max,
+        title: cli.title,
+        mode: cli.mode,
+        unit: cli.unit,
+        y_min: cli.min,
+        y_max: cli.max,
         log_scale: cli.log_scale,
-        history:   cli.history.clamp(10, 10_000),
-        fps:       cli.fps.clamp(1, 120),
+        history: cli.history.clamp(10, 10_000),
+        fps: cli.fps.clamp(1, 120),
         rate_mode: cli.rate,
         filter,
-        theme:     cli.theme,
+        theme: cli.theme,
     };
 
     // Duplicate the piped stdin fd so the reader thread can consume data from it,

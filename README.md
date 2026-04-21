@@ -2,22 +2,12 @@
   <img src="santana.png" alt="Santana" width="100">
 </p>
 
-```
- ░▒▓███████▓▒░░▒▓██████▓▒░░▒▓███████▓▒░▒▓████████▓▒░▒▓██████▓▒░░▒▓███████▓▒░ ░▒▓██████▓▒░
-░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░ ░▒▓█▓▒░  ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░
-░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░ ░▒▓█▓▒░  ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░
- ░▒▓██████▓▒░░▒▓████████▓▒░▒▓█▓▒░░▒▓█▓▒░ ░▒▓█▓▒░  ░▒▓████████▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓████████▓▒░
-       ░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░ ░▒▓█▓▒░  ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░
-       ░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░ ░▒▓█▓▒░  ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░▒▓█▓▒░
-░▒▓███████▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░ ░▒▓█▓▒░  ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░
-```
-
-`Santana` is a realtime terminal data plotter for logs and numeric streams.
+`santana` is a realtime terminal data plotter for logs and numeric streams.
 
 <p align="center">
-    <a href="https://github.com/deepsoftworks/santana-app/stargazers"><img src="https://img.shields.io/github/stars/deepsoftworks/santana-app?style=flat&color=yellow" alt="Stars"></a>
-    <a href="https://github.com/deepsoftworks/santana-app/commits/main"><img src="https://img.shields.io/github/last-commit/deepsoftworks/santana-app?style=flat" alt="Last Commit"></a>
-    <a href="LICENSE"><img src="https://img.shields.io/github/license/deepsoftworks/santana-app?style=flat" alt="License"></a>
+    <a href="https://github.com/deepsoftworks/santana/stargazers"><img src="https://img.shields.io/github/stars/deepsoftworks/santana-app?style=flat&color=yellow" alt="Stars"></a>
+    <a href="https://github.com/deepsoftworks/santana/commits/main"><img src="https://img.shields.io/github/last-commit/deepsoftworks/santana-app?style=flat" alt="Last Commit"></a>
+    <a href="LICENSE"><img src="https://img.shields.io/github/license/deepsoftworks/santana?style=flat" alt="License"></a>
     <a href="#"><img src="https://img.shields.io/github/repo-size/deepsoftworks/santana"></a>
 </p>
 

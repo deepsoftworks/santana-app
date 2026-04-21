@@ -1,9 +1,9 @@
 use ratatui::{
-    Frame,
     layout::Rect,
     style::{Style, Stylize},
     text::{Line, Span},
     widgets::Paragraph,
+    Frame,
 };
 
 use crate::app::AppState;
@@ -27,19 +27,30 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
     spans.push(Span::raw(" "));
 
     // Zoom
-    if state.zoom < state.config.history {
-        let zoom_label = format!("{}x zoom", state.config.history / state.zoom.max(1));
+    let base_window = state
+        .streams
+        .slots
+        .iter()
+        .map(|slot| slot.buffer.len())
+        .max()
+        .unwrap_or(state.config.history)
+        .max(1);
+    if state.zoom < base_window {
+        let zoom_factor = base_window as f64 / state.zoom.max(1) as f64;
+        let zoom_label = if (zoom_factor - zoom_factor.round()).abs() < 0.05 {
+            format!("{}x zoom", zoom_factor.round() as usize)
+        } else {
+            format!("{zoom_factor:.1}x zoom")
+        };
         spans.push(indicator(&zoom_label, true, theme));
         spans.push(Span::raw(" "));
     }
 
     // Rate mode
-    spans.push(indicator(
-        &format!("rate:{}", if state.rate_mode { "on" } else { "off" }),
-        state.rate_mode,
-        theme,
-    ));
-    spans.push(Span::raw(" "));
+    if state.rate_mode {
+        spans.push(indicator("rate:on", true, theme));
+        spans.push(Span::raw(" "));
+    }
 
     // Log scale
     if state.config.log_scale {
@@ -92,10 +103,7 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
     // FPS (right-aligned via filler)
     let fps_str = format!("{:.0}fps", state.fps_display);
     // We'll just append it at the end (right-justified requires split layout, keep simple)
-    spans.push(Span::styled(
-        fps_str,
-        Style::default().fg(theme.dim),
-    ));
+    spans.push(Span::styled(fps_str, Style::default().fg(theme.dim)));
 
     let line = Line::from(spans);
     let para = Paragraph::new(line);

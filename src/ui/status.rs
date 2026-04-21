@@ -8,7 +8,7 @@ use ratatui::{
 
 use crate::app::AppState;
 use crate::ui::charts::fmt_metric;
-use crate::ui::theme::stream_symbol;
+use crate::ui::theme::{stream_marker, stream_marker_color};
 
 pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
     if area.height == 0 {
@@ -40,12 +40,6 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
         .iter()
         .map(|(slot_idx, slot)| {
             let is_selected = *slot_idx == state.selected_idx;
-            let sym = stream_symbol(slot.color_idx);
-            let bullet = if slot.visible {
-                format!("{} ", sym)
-            } else {
-                format!("({}) ", sym)
-            };
             let row_style = if is_selected {
                 Style::default().bg(state.theme.selected_bg)
             } else {
@@ -60,9 +54,20 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
             let stats = slot.buffer.stats();
             let unit = &state.config.unit;
             let rate = state.rate_mode;
+            let marker_style = if slot.visible {
+                Style::default()
+                    .fg(stream_marker_color(&state.theme, slot.color_idx))
+                    .bold()
+            } else {
+                Style::default().fg(state.theme.dim)
+            };
+            let label_cell = Line::from(vec![
+                Span::styled(format!("{} ", stream_marker()), marker_style),
+                Span::styled(slot.label.clone(), label_style),
+            ]);
 
             Row::new(vec![
-                Cell::from(Span::styled(format!("{}{}", bullet, &slot.label), label_style)),
+                Cell::from(label_cell),
                 Cell::from(Span::styled(
                     format!("now {:>10}", fmt_metric(stats.current, unit, rate)),
                     Style::default().fg(state.theme.title),
