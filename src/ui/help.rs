@@ -2,7 +2,7 @@ use ratatui::{
     layout::{Constraint, Rect},
     style::{Style, Stylize},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Cell, Clear, Paragraph, Row, Table},
+    widgets::{Block, BorderType, Borders, Cell, Clear, Row, Table},
     Frame,
 };
 
@@ -24,35 +24,6 @@ const KEYBINDINGS: &[(&str, &str)] = &[
     ("?", "Toggle this help overlay"),
     ("Ctrl+L", "Force redraw"),
 ];
-
-pub fn render(frame: &mut Frame, area: Rect, theme: &Theme) {
-    let hints = [
-        ("q", "quit"),
-        ("m", "mode"),
-        ("r", "rate"),
-        ("Space", "pause"),
-        ("+/-", "zoom"),
-        (",/.", "pan"),
-        ("↑↓", "select"),
-        ("t/T", "toggle"),
-        ("y", "y-lock"),
-        ("?", "help"),
-    ];
-
-    let spans: Vec<Span> = hints
-        .iter()
-        .flat_map(|(k, v)| {
-            vec![
-                Span::styled(k.to_string(), Style::default().fg(theme.border).bold()),
-                Span::styled(format!(":{} ", v), Style::default().fg(theme.help_desc)),
-            ]
-        })
-        .collect();
-
-    let line = Line::from(spans);
-    let para = Paragraph::new(line);
-    frame.render_widget(para, area);
-}
 
 pub fn render_overlay(frame: &mut Frame, area: Rect, theme: &Theme) {
     let width = 62u16.min(area.width.saturating_sub(4));

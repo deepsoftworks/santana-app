@@ -2,7 +2,12 @@
   <img src="santana.png" alt="Santana" width="100">
 </p>
 
-`santana` is a realtime terminal data plotter for logs and numeric streams.
+<p align="center">santana is a realtime terminal data plotter for logs and numeric streams.</p>
+
+<div align="center">
+      <img src="examples/demo.gif" alt="Demo" width="49%">
+      <img src="examples/net.gif" alt="Network" width="49%">
+</div>
 
 <p align="center">
     <a href="https://github.com/deepsoftworks/santana/stargazers"><img src="https://img.shields.io/github/stars/deepsoftworks/santana-app?style=flat&color=yellow" alt="Stars"></a>
@@ -108,20 +113,4 @@ kubectl top pods --no-headers | santana --filter "cpu|memory"
 |------|-------------|
 | `line` | Braille-based line chart per stream |
 | `bar` | Grouped vertical bars |
-| `spark` | Compact sparklines, one row per stream |
-| `overlay` | All streams overlaid on a single canvas |
 | `split` | Each stream in its own pane, auto-scaled independently |
-
-## Examples
-
-```bash
-./examples/network.sh
-./examples/memory_usage.sh
-```
-
-Both scripts support raw output for custom pipelines:
-
-```bash
-SANTANA_EXAMPLE_RAW=1 ./examples/network.sh | santana --title "Network" --unit B --rate
-SANTANA_EXAMPLE_RAW=1 ./examples/memory_usage.sh | santana --title "Memory Usage" --unit % --min 0 --max 100
-```

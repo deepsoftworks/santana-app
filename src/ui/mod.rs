@@ -1,5 +1,4 @@
 pub mod charts;
-pub mod header;
 pub mod help;
 pub mod layout;
 pub mod status;
@@ -9,7 +8,7 @@ pub mod widgets;
 use ratatui::{layout::Margin, Frame};
 
 use crate::app::AppState;
-use widgets::{draw_btop_box, draw_separator};
+use widgets::{draw_bottom_right_hint, draw_btop_box, draw_separator};
 
 pub fn render(frame: &mut Frame, state: &AppState) {
     let area = frame.area();
@@ -24,7 +23,6 @@ pub fn render(frame: &mut Frame, state: &AppState) {
     let areas = layout::compute(inner, area, state);
 
     // Content
-    header::render(frame, areas.header, state);
     charts::render(frame, areas.chart, state);
 
     // ├─┤ streams N active ├────────────┤
@@ -34,10 +32,7 @@ pub fn render(frame: &mut Frame, state: &AppState) {
 
     status::render(frame, areas.status, state);
 
-    // ├─────────────────────────────────┤
-    draw_separator(frame.buffer_mut(), area, areas.sep2_y, None, &state.theme);
-
-    help::render(frame, areas.help, &state.theme);
+    draw_bottom_right_hint(frame, area, "?:help", &state.theme);
 
     // Help overlay on top of everything
     if state.show_help {

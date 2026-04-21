@@ -1,10 +1,10 @@
 use ratatui::{
     Frame,
     buffer::Buffer,
-    layout::Rect,
+    layout::{Alignment, Rect},
     style::{Style, Stylize},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders},
+    widgets::{Block, BorderType, Borders, Paragraph},
 };
 
 use crate::ui::theme::Theme;
@@ -60,4 +60,24 @@ pub fn draw_separator(buf: &mut Buffer, outer: Rect, y: u16, title: Option<&str>
         let label = format!("─┤ {} ├", t);
         buf.set_string(x0 + 1, y, &label, Style::default().fg(theme.status_header).bold());
     }
+}
+
+pub fn draw_bottom_right_hint(frame: &mut Frame, area: Rect, hint: &str, theme: &Theme) {
+    if area.width < 4 || area.height < 1 {
+        return;
+    }
+
+    let hint_area = Rect {
+        x: area.x + 1,
+        y: area.y + area.height - 1,
+        width: area.width.saturating_sub(2),
+        height: 1,
+    };
+    let line = Line::from(vec![
+        Span::styled("─┤ ", Style::default().fg(theme.border)),
+        Span::styled(hint.to_string(), Style::default().fg(theme.title).bold()),
+        Span::styled(" ├", Style::default().fg(theme.border)),
+    ]);
+    let para = Paragraph::new(line).alignment(Alignment::Right);
+    frame.render_widget(para, hint_area);
 }

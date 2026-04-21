@@ -3,12 +3,9 @@ use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use crate::app::AppState;
 
 pub struct LayoutAreas {
-    pub header: Rect,
     pub chart:  Rect,
     pub sep1_y: u16, // absolute y of the separator before the status panel
     pub status: Rect,
-    pub sep2_y: u16, // absolute y of the separator before the help bar
-    pub help:   Rect,
 }
 
 /// Compute layout areas given the inner area (inside the outer border box).
@@ -26,26 +23,20 @@ pub fn compute(inner: Rect, _outer: Rect, state: &AppState) -> LayoutAreas {
         + if visible_streams > 8 { 1 } else { 0 };
     let status_h = (status_rows + extra) as u16;
 
-    // Layout: header | chart | sep1 | status | sep2 | help
+    // Layout: chart | sep1 | status
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(1),           // header
-            Constraint::Min(4),              // chart
-            Constraint::Length(1),           // sep1 row
-            Constraint::Length(status_h),    // status rows
-            Constraint::Length(1),           // sep2 row
-            Constraint::Length(1),           // help
+            Constraint::Min(4),           // chart
+            Constraint::Length(1),        // sep1 row
+            Constraint::Length(status_h), // status rows
         ])
         .split(inner);
 
     LayoutAreas {
-        header: chunks[0],
-        chart:  chunks[1],
-        sep1_y: chunks[2].y,
-        status: chunks[3],
-        sep2_y: chunks[4].y,
-        help:   chunks[5],
+        chart:  chunks[0],
+        sep1_y: chunks[1].y,
+        status: chunks[2],
     }
 }
 
@@ -88,11 +79,11 @@ pub fn compute_grid(area: Rect, n: usize) -> Vec<Rect> {
     panes
 }
 
-/// Split an area into a narrow Y-axis column (9 chars), a gap, and the chart canvas.
+/// Split an area into a narrow Y-axis column and the chart canvas.
 pub fn split_yaxis_chart(chart_area: Rect) -> (Rect, Rect) {
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Length(9), Constraint::Length(1), Constraint::Min(1)])
+        .constraints([Constraint::Length(8), Constraint::Min(1)])
         .split(chart_area);
-    (chunks[0], chunks[2])
+    (chunks[0], chunks[1])
 }

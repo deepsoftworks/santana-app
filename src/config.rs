@@ -15,14 +15,6 @@ impl ChartMode {
             ChartMode::Split => ChartMode::Line,
         }
     }
-
-    pub fn label(self) -> &'static str {
-        match self {
-            ChartMode::Line => "line",
-            ChartMode::Bar => "bar",
-            ChartMode::Split => "split",
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
